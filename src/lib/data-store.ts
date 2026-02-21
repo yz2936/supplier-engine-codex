@@ -17,6 +17,7 @@ const appStateKey = process.env.APP_STATE_KEY?.trim() || "main";
 
 let pool: Pool | null = null;
 let dbReady = false;
+let fileMutex: Promise<void> = Promise.resolve();
 
 const defaultManufacturers: AppData["manufacturers"] = [
   {
@@ -163,18 +164,21 @@ const ensureDb = async () => {
   dbReady = true;
 };
 
+const ensureDbSeed = async () => {
+  const p = getPool();
+  const seed = normalizeData(defaultData);
+  await p.query(
+    "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do nothing",
+    [appStateKey, JSON.stringify(seed)]
+  );
+};
+
 const readFromDb = async (): Promise<AppData> => {
   await ensureDb();
+  await ensureDbSeed();
   const p = getPool();
   const res = await p.query("select payload from app_state where id = $1 limit 1", [appStateKey]);
-  if (!res.rowCount) {
-    const seed = normalizeData(defaultData);
-    await p.query(
-      "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set payload = excluded.payload, updated_at = now()",
-      [appStateKey, JSON.stringify(seed)]
-    );
-    return seed;
-  }
+  if (!res.rowCount) return normalizeData(defaultData);
   return normalizeData(res.rows[0].payload as AppData);
 };
 
@@ -206,25 +210,68 @@ const writeToFile = async (data: AppData) => {
   await fs.writeFile(dataPath, JSON.stringify(normalized, null, 2));
 };
 
+const withFileLock = async <T>(fn: () => Promise<T>) => {
+  const prev = fileMutex;
+  let release!: () => void;
+  fileMutex = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+};
+
 export const readData = async (): Promise<AppData> => {
   if (usingDatabase()) {
-    try {
-      return await readFromDb();
-    } catch (error) {
-      throw new Error(error instanceof Error ? `Database read failed: ${error.message}` : "Database read failed");
-    }
+    return readFromDb();
   }
   return readFromFile();
 };
 
 export const writeData = async (data: AppData) => {
   if (usingDatabase()) {
-    try {
-      await writeToDb(data);
-      return;
-    } catch (error) {
-      throw new Error(error instanceof Error ? `Database write failed: ${error.message}` : "Database write failed");
-    }
+    await writeToDb(data);
+    return;
   }
   await writeToFile(data);
+};
+
+export const mutateData = async <T>(mutator: (data: AppData) => Promise<T> | T): Promise<T> => {
+  if (usingDatabase()) {
+    await ensureDb();
+    const p = getPool();
+    const client = await p.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("select pg_advisory_xact_lock(hashtext($1))", [appStateKey]);
+      await client.query(
+        "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do nothing",
+        [appStateKey, JSON.stringify(normalizeData(defaultData))]
+      );
+      const current = await client.query("select payload from app_state where id = $1 for update", [appStateKey]);
+      const data = normalizeData((current.rows[0]?.payload as AppData) ?? defaultData);
+      const result = await mutator(data);
+      await client.query(
+        "update app_state set payload = $2::jsonb, updated_at = now() where id = $1",
+        [appStateKey, JSON.stringify(normalizeData(data))]
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  return withFileLock(async () => {
+    const data = await readFromFile();
+    const result = await mutator(data);
+    await writeToFile(data);
+    return result;
+  });
 };

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { AppUser, UserRole } from "@/lib/types";
 
 const COOKIE_NAME = "stainless_session";
@@ -19,14 +19,14 @@ const parseCookies = (req: Request) => {
 };
 
 const cleanExpiredSessions = async () => {
-  const data = await readData();
   const now = Date.now();
-  const before = data.sessions.length;
-  data.sessions = data.sessions.filter((s) => new Date(s.expiresAt).getTime() > now);
-  if (data.sessions.length !== before) {
-    await writeData(data);
-  }
-  return data;
+
+  await mutateData((data) => {
+    data.sessions = data.sessions.filter((s) => new Date(s.expiresAt).getTime() > now);
+    return null;
+  });
+
+  return readData();
 };
 
 export const getAuthenticatedUser = async (req: Request): Promise<AppUser | null> => {
@@ -59,23 +59,23 @@ export const requireRole = async (req: Request, roles: UserRole[]) => {
 };
 
 export const createSession = async (userId: string) => {
-  const data = await readData();
   const token = randomBytes(24).toString("hex");
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS).toISOString();
 
-  data.sessions.push({ token, userId, createdAt: now.toISOString(), expiresAt });
-  await writeData(data);
+  await mutateData((data) => {
+    data.sessions.push({ token, userId, createdAt: now.toISOString(), expiresAt });
+    return null;
+  });
+
   return { token, expiresAt };
 };
 
 export const destroySession = async (token: string) => {
-  const data = await readData();
-  const before = data.sessions.length;
-  data.sessions = data.sessions.filter((s) => s.token !== token);
-  if (before !== data.sessions.length) {
-    await writeData(data);
-  }
+  await mutateData((data) => {
+    data.sessions = data.sessions.filter((s) => s.token !== token);
+    return null;
+  });
 };
 
 export const setSessionCookie = (res: NextResponse, token: string, expiresAt: string) => {

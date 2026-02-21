@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { requireRole, requireUser } from "@/lib/server-auth";
 import { Manufacturer } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+const sortManufacturers = (items: Manufacturer[]) => [...items].sort((a, b) => {
+  if (a.preferred === b.preferred) return a.name.localeCompare(b.name);
+  return a.preferred ? -1 : 1;
+});
 
 export async function GET(req: Request) {
   const auth = await requireUser(req);
   if (!auth.ok) return auth.response;
 
   const data = await readData();
-  const manufacturers = [...data.manufacturers].sort((a, b) => {
-    if (a.preferred === b.preferred) return a.name.localeCompare(b.name);
-    return a.preferred ? -1 : 1;
-  });
-  return NextResponse.json({ manufacturers });
+  const manufacturers = sortManufacturers(data.manufacturers);
+  return NextResponse.json({ manufacturers }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: Request) {
@@ -41,25 +45,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valid supplier email is required" }, { status: 400 });
   }
 
-  const data = await readData();
-  const duplicate = data.manufacturers.some((m) => m.email.toLowerCase() === email || m.name.toLowerCase() === name.toLowerCase());
-  if (duplicate) return NextResponse.json({ error: "Supplier with same name or email already exists" }, { status: 409 });
+  const result = await mutateData((data) => {
+    const duplicate = data.manufacturers.some((m) => m.email.toLowerCase() === email || m.name.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      return { ok: false as const, error: "Supplier with same name or email already exists", status: 409 as const };
+    }
 
-  if (preferred) {
-    data.manufacturers = data.manufacturers.map((m) => ({ ...m, preferred: false }));
+    if (preferred) {
+      data.manufacturers = data.manufacturers.map((m) => ({ ...m, preferred: false }));
+    }
+
+    const supplier: Manufacturer = {
+      id: crypto.randomUUID(),
+      name,
+      email,
+      specialties: specialties.length ? specialties : ["General"],
+      leadTimeDays,
+      preferred,
+      phone,
+      regions
+    };
+    data.manufacturers.push(supplier);
+
+    const manufacturers = sortManufacturers(data.manufacturers);
+    return { ok: true as const, supplier, manufacturers };
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  const supplier: Manufacturer = {
-    id: crypto.randomUUID(),
-    name,
-    email,
-    specialties: specialties.length ? specialties : ["General"],
-    leadTimeDays,
-    preferred,
-    phone,
-    regions
-  };
-  data.manufacturers.push(supplier);
-  await writeData(data);
-  return NextResponse.json({ ok: true, manufacturer: supplier });
+  return NextResponse.json({ ok: true, manufacturer: result.supplier, manufacturers: result.manufacturers });
 }
