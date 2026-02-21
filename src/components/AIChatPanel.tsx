@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserRole } from "@/lib/types";
 import { LlmProvider } from "@/lib/llm-provider";
 
@@ -59,8 +59,13 @@ export function AIChatPanel({
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const push = (msg: Message) => setMessages((prev) => [...prev, msg]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages]);
 
   const tryRunLocalCommand = async (prompt: string) => {
     const lower = prompt.toLowerCase();
@@ -168,7 +173,7 @@ export function AIChatPanel({
   };
 
   return (
-    <div className={`panel space-y-3 ${compact ? "h-full overflow-hidden p-3" : ""}`}>
+    <div className={`panel ${compact ? "flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3" : "space-y-3"}`}>
       <div className="flex items-center justify-between">
         <div>
           <div className="section-title">Assistant</div>
@@ -194,56 +199,59 @@ export function AIChatPanel({
         </button>
       </div>
 
-      <div className={`${compact ? "h-[36vh] md:h-[44vh]" : "max-h-72"} space-y-2 overflow-auto rounded-xl border border-steel-200 bg-steel-50 p-2`}>
+      <div className={`${compact ? "min-h-0 flex-1" : "max-h-72"} space-y-2 overflow-auto rounded-xl border border-steel-200 bg-steel-50 p-2`}>
         {messages.map((m, i) => (
           <div key={`${m.role}-${i}`} className={m.role === "assistant" ? "rounded-lg bg-white px-2 py-1 text-sm" : "rounded-lg border border-teal-100 bg-teal-50 px-2 py-1 text-sm font-medium"}>
             <span className="mr-2 text-xs uppercase text-steel-600">{m.role}</span>
             <span>{m.content}</span>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        {activeView === "workspace" && (
-          <>
-            <button className="btn-secondary" onClick={() => void send("Validate buyer using current buyer email and customer details")}>Validate Buyer</button>
-            <button className="btn-secondary" onClick={() => void send("Check logistics completeness from the current RFQ and tell me what is missing")}>Check Logistics</button>
-            <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
-            <button className="btn-secondary" onClick={() => void send("Parse and generate quote from current RFQ")}>Run Parse</button>
-          </>
-        )}
-        {activeView === "inventory" && (
-          <>
-            <button className="btn-secondary" onClick={() => void onRefreshInventory?.()}>Refresh Inventory</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("sourcing")}>Open Sourcing</button>
-            <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
-            <button className="btn-secondary" onClick={() => void send("Check logistics completeness from the current RFQ and tell me what is missing")}>Logistics Check</button>
-          </>
-        )}
-        {activeView === "sourcing" && (
-          <>
-            <button className="btn-secondary" onClick={() => void send("Suggest margin impact for low stock and upstream sourcing risk")}>Risk Margin</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Back to Inventory</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("buyers")}>Open Buyers</button>
-            <button className="btn-secondary" onClick={() => void send("Summarize next sourcing actions and buyer communication plan")}>Next Steps</button>
-          </>
-        )}
-        {activeView === "buyers" && (
-          <>
-            <button className="btn-secondary" onClick={() => void send("Validate buyer using current buyer email and customer details")}>Validate Buyer</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("workspace")}>Start Quote</button>
-            <button className="btn-secondary" onClick={() => void send("Draft a short buyer reply to confirm specs and ETA expectations")}>Draft Reply</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("quotes")}>Open Quotes</button>
-          </>
-        )}
-        {(activeView === "dashboard" || activeView === "quotes" || activeView === "settings") && (
-          <>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("workspace")}>Open Workspace</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Open Inventory</button>
-            <button className="btn-secondary" onClick={() => onNavigateView?.("sourcing")}>Open Sourcing</button>
-            <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
-          </>
-        )}
+      <div className={`${compact ? "max-h-40 overflow-auto pr-1" : ""}`}>
+        <div className="grid grid-cols-2 gap-2">
+          {activeView === "workspace" && (
+            <>
+              <button className="btn-secondary" onClick={() => void send("Validate buyer using current buyer email and customer details")}>Validate Buyer</button>
+              <button className="btn-secondary" onClick={() => void send("Check logistics completeness from the current RFQ and tell me what is missing")}>Check Logistics</button>
+              <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
+              <button className="btn-secondary" onClick={() => void send("Parse and generate quote from current RFQ")}>Run Parse</button>
+            </>
+          )}
+          {activeView === "inventory" && (
+            <>
+              <button className="btn-secondary" onClick={() => void onRefreshInventory?.()}>Refresh Inventory</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("sourcing")}>Open Sourcing</button>
+              <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
+              <button className="btn-secondary" onClick={() => void send("Check logistics completeness from the current RFQ and tell me what is missing")}>Logistics Check</button>
+            </>
+          )}
+          {activeView === "sourcing" && (
+            <>
+              <button className="btn-secondary" onClick={() => void send("Suggest margin impact for low stock and upstream sourcing risk")}>Risk Margin</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Back to Inventory</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("buyers")}>Open Buyers</button>
+              <button className="btn-secondary" onClick={() => void send("Summarize next sourcing actions and buyer communication plan")}>Next Steps</button>
+            </>
+          )}
+          {activeView === "buyers" && (
+            <>
+              <button className="btn-secondary" onClick={() => void send("Validate buyer using current buyer email and customer details")}>Validate Buyer</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("workspace")}>Start Quote</button>
+              <button className="btn-secondary" onClick={() => void send("Draft a short buyer reply to confirm specs and ETA expectations")}>Draft Reply</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("quotes")}>Open Quotes</button>
+            </>
+          )}
+          {(activeView === "dashboard" || activeView === "quotes" || activeView === "settings") && (
+            <>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("workspace")}>Open Workspace</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Open Inventory</button>
+              <button className="btn-secondary" onClick={() => onNavigateView?.("sourcing")}>Open Sourcing</button>
+              <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
+            </>
+          )}
+        </div>
       </div>
 
       <textarea
