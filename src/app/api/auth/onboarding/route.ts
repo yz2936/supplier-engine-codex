@@ -19,8 +19,8 @@ export async function POST(req: Request) {
   }
 
   const result = await mutateData((data) => {
-    const user = data.users.find((u) => u.id === auth.user.id);
-    if (!user) return { ok: false as const, status: 404 as const, error: "User not found" };
+    const user = data.users.find((u) => u.id === auth.user.id || u.email === auth.user.email);
+    if (!user) return { ok: false as const, status: 401 as const, error: "Session is no longer valid. Please log in again." };
 
     user.name = name;
     user.companyName = companyName;

@@ -46,6 +46,8 @@ export default function HomePage() {
   const [onboardingName, setOnboardingName] = useState("");
   const [onboardingCompany, setOnboardingCompany] = useState("");
   const [onboardingRole, setOnboardingRole] = useState<UserRole>("sales_rep");
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [onboardingError, setOnboardingError] = useState("");
 
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [customerName, setCustomerName] = useState("");
@@ -467,17 +469,31 @@ export default function HomePage() {
           </select>
           <button
             className="btn"
+            disabled={onboardingBusy}
             onClick={async () => {
-              const res = await fetch("/api/auth/onboarding", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: onboardingName, companyName: onboardingCompany, role: onboardingRole })
-              });
-              if (res.ok) await loadCurrentUser();
+              setOnboardingError("");
+              setOnboardingBusy(true);
+              try {
+                const res = await fetch("/api/auth/onboarding", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: onboardingName, companyName: onboardingCompany, role: onboardingRole })
+                });
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                  setOnboardingError(json?.error || "Failed to save onboarding profile");
+                  return;
+                }
+                setUser(json.user ?? null);
+                await loadCurrentUser();
+              } finally {
+                setOnboardingBusy(false);
+              }
             }}
           >
-            Continue to Dashboard
+            {onboardingBusy ? "Saving..." : "Continue to Dashboard"}
           </button>
+          {onboardingError && <p className="text-sm text-rose-600">{onboardingError}</p>}
         </div>
       </main>
     );
