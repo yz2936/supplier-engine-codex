@@ -1,0 +1,4 @@
+sku,category,grade,thickness,width,length,finish,weightPerUnit,basePrice,qtyOnHand
+SH304-16GA-48120,Sheet,304,0.0598,48,120,#4,98.1,1.42,7200
+SH304L-14GA-48120,Sheet,304L,0.0747,48,120,2B,122.4,1.46,3100
+PI316L-0120-2240,Pipe,316L,0.12,2,240,HRAP,13.5,2.85,1800
