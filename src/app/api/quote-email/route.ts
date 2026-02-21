@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     const cfg = smtpConfig();
     if (!cfg.host) {
       return NextResponse.json({
-        error: "SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in .env.local"
+        error: "SMTP is not configured. In Vercel set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM under Project Settings -> Environment Variables (or use .env.local for local dev)."
       }, { status: 400 });
     }
 

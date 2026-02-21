@@ -10,11 +10,24 @@ type SyncResult = {
   skipped: number;
 };
 
+const inferImapHostFromSmtp = (smtpHost?: string) => {
+  const host = (smtpHost || "").trim().toLowerCase();
+  if (!host) return "";
+  if (host.includes("gmail.com")) return "imap.gmail.com";
+  if (host.includes("office365.com") || host.includes("outlook.com") || host.includes("hotmail.com") || host.includes("live.com")) {
+    return "outlook.office365.com";
+  }
+  if (host.startsWith("smtp.")) return host.replace(/^smtp\./, "imap.");
+  return "";
+};
+
 const inboxConfig = () => {
   const user = process.env.IMAP_USER?.trim() || process.env.SMTP_USER?.trim() || "";
   const pass = (process.env.IMAP_PASS || process.env.SMTP_PASS || "").replace(/\s+/g, "");
+  const inferredHost = inferImapHostFromSmtp(process.env.SMTP_HOST?.trim());
+
   return {
-    host: process.env.IMAP_HOST?.trim() || "imap.gmail.com",
+    host: process.env.IMAP_HOST?.trim() || inferredHost || "imap.gmail.com",
     port: Number(process.env.IMAP_PORT || 993),
     secure: String(process.env.IMAP_SECURE || "true").toLowerCase() === "true",
     user,
@@ -66,7 +79,9 @@ export const syncInboundMailboxForManager = async (
 ): Promise<SyncResult> => {
   const cfg = inboxConfig();
   if (!cfg.user || !cfg.pass) {
-    throw new Error("IMAP credentials are missing. Set IMAP_USER and IMAP_PASS in .env.local.");
+    throw new Error(
+      "Inbound mailbox is not configured. In Vercel set IMAP_USER + IMAP_PASS (or reuse SMTP_USER + SMTP_PASS), plus IMAP_HOST/IMAP_PORT/IMAP_SECURE as needed."
+    );
   }
 
   const client = new ImapFlow({
