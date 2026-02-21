@@ -71,7 +71,7 @@ export default function HomePage() {
   const [sendStatus, setSendStatus] = useState("");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const parseAbortRef = useRef<AbortController | null>(null);
   const parseRequestIdRef = useRef(0);
 
@@ -148,6 +148,12 @@ export default function HomePage() {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     const cnLike = locale.includes("zh-cn") || locale.includes("zh-hans") || tz.includes("Shanghai") || tz.includes("Chongqing");
     setLlmProvider(cnLike ? "deepseek" : "openai");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1280) {
+      setChatOpen(true);
+    }
   }, []);
 
   useEffect(() => {
