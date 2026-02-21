@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "rm -rf .next && next dev",
-    "build": "rm -rf .next-build && NEXT_DIST_DIR=.next-build next build",
-    "start": "NEXT_DIST_DIR=.next-build next start",
+    "build": "rm -rf .next && next build",
+    "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "seed": "node scripts/seed.mjs"

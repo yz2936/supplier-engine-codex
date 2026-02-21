@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
+const isVercel = Boolean(process.env.VERCEL);
+
 const nextConfig: NextConfig = {
-  distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
+  distDir: isVercel ? ".next" : process.env.NEXT_DIST_DIR?.trim() || ".next",
   experimental: {
     typedRoutes: true
   }
