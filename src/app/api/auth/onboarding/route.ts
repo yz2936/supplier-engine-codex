@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { mutateData } from "@/lib/data-store";
-import { requireUser } from "@/lib/server-auth";
-import { UserRole } from "@/lib/types";
+import { createSession, requireUser, setSessionCookie } from "@/lib/server-auth";
+import { AppUser, UserRole } from "@/lib/types";
 
 const validRoles: UserRole[] = ["sales_rep", "inventory_manager", "sales_manager"];
 
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
 
     return {
       ok: true as const,
+      sessionUser: { ...user },
       user: {
         id: user.id,
         name: user.name,
@@ -46,5 +47,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
 
-  return NextResponse.json({ ok: true, user: result.user });
+  const { token, expiresAt } = await createSession(result.user.id);
+  const res = NextResponse.json({ ok: true, user: result.user });
+  setSessionCookie(res, token, expiresAt, result.sessionUser as AppUser);
+  return res;
 }
