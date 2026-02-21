@@ -13,7 +13,7 @@
   "dependencies": {
     "imapflow": "^1.2.10",
     "mailparser": "^3.9.3",
-    "next": "15.1.6",
+    "next": "^16.1.6",
     "nodemailer": "^6.9.16",
     "openai": "4.83.0",
     "react": "19.0.0",
