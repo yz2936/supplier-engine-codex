@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData } from "@/lib/data-store";
 import { requireUser } from "@/lib/server-auth";
 import { UserRole } from "@/lib/types";
 
@@ -18,27 +18,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "name, companyName, and valid role are required" }, { status: 400 });
   }
 
-  const data = await readData();
-  const user = data.users.find((u) => u.id === auth.user.id);
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  const result = await mutateData((data) => {
+    const user = data.users.find((u) => u.id === auth.user.id);
+    if (!user) return { ok: false as const, status: 404 as const, error: "User not found" };
 
-  user.name = name;
-  user.companyName = companyName;
-  user.role = role;
-  user.onboarded = true;
+    user.name = name;
+    user.companyName = companyName;
+    user.role = role;
+    user.onboarded = true;
 
-  await writeData(data);
-  return NextResponse.json({
-    ok: true,
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      companyId: user.companyId,
-      companyName: user.companyName,
-      onboarded: user.onboarded,
-      createdAt: user.createdAt
-    }
+    return {
+      ok: true as const,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        companyId: user.companyId,
+        companyName: user.companyName,
+        onboarded: user.onboarded,
+        createdAt: user.createdAt
+      }
+    };
   });
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+
+  return NextResponse.json({ ok: true, user: result.user });
 }
