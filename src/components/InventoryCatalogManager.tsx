@@ -139,6 +139,7 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
     const qtyOnHand = draftQtyOnHand[sku];
     setMessage(`Saving ${sku}...`);
     const res = await fetch(`/api/inventory/${encodeURIComponent(sku)}`, {
+      credentials: "include",
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ basePrice, qtyOnHand })

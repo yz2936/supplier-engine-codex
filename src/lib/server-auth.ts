@@ -18,25 +18,23 @@ const parseCookies = (req: Request) => {
   return out;
 };
 
-const cleanExpiredSessions = async () => {
-  const now = Date.now();
-
-  await mutateData((data) => {
-    data.sessions = data.sessions.filter((s) => new Date(s.expiresAt).getTime() > now);
-    return null;
-  });
-
-  return readData();
-};
-
 export const getAuthenticatedUser = async (req: Request): Promise<AppUser | null> => {
-  const data = await cleanExpiredSessions();
   const cookies = parseCookies(req);
   const token = cookies[COOKIE_NAME];
   if (!token) return null;
 
+  const data = await readData();
   const session = data.sessions.find((s) => s.token === token);
   if (!session) return null;
+
+  const expiresAt = new Date(session.expiresAt).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    await mutateData((next) => {
+      next.sessions = next.sessions.filter((s) => s.token !== token);
+      return null;
+    });
+    return null;
+  }
 
   return data.users.find((u) => u.id === session.userId) ?? null;
 };

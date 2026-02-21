@@ -59,6 +59,11 @@ type Props = {
   onSeedConsumed?: () => void;
 };
 
+const sortManufacturers = (list: Manufacturer[]) => [...list].sort((a, b) => {
+  if (a.preferred === b.preferred) return a.name.localeCompare(b.name);
+  return a.preferred ? -1 : 1;
+});
+
 export function SourcingHub({ customerName, quoteLines, initialInventorySku, onSeedConsumed }: Props) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
@@ -83,15 +88,15 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
 
   const load = useCallback(async () => {
     const [invRes, manRes, reqRes] = await Promise.all([
-      fetch("/api/inventory"),
-      fetch("/api/manufacturers"),
-      fetch("/api/sourcing")
+      fetch("/api/inventory", { cache: "no-store" }),
+      fetch("/api/manufacturers", { cache: "no-store" }),
+      fetch("/api/sourcing", { cache: "no-store" })
     ]);
     const [invJson, manJson, reqJson] = await Promise.all([invRes.json(), manRes.json(), reqRes.json()]);
 
     if (invRes.ok) setInventory(invJson.inventory || []);
     if (manRes.ok) {
-      const list = manJson.manufacturers || [];
+      const list = sortManufacturers(manJson.manufacturers || []);
       setManufacturers(list);
       if ((!manufacturerId || !list.some((m: Manufacturer) => m.id === manufacturerId)) && list[0]?.id) {
         setManufacturerId(list[0].id);
@@ -142,10 +147,29 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
     [inventory]
   );
 
-  const candidates = useMemo(
-    () => [...quoteShortages, ...inventoryRestock],
-    [inventoryRestock, quoteShortages]
-  );
+  const seedCandidate = useMemo(() => {
+    if (!initialInventorySku) return null;
+    const found = inventory.find((i) => i.sku === initialInventorySku);
+    if (!found) return null;
+    return {
+      key: `i-${found.sku}`,
+      sourceContext: "inventory_restock" as const,
+      reason: (found.qtyOnHand <= 0 ? "out_of_stock" : "low_stock") as "out_of_stock" | "low_stock",
+      sku: found.sku,
+      productType: found.category,
+      grade: found.grade,
+      dimension: `${found.thickness} x ${found.width} x ${found.length}${found.schedule ? ` SCH ${found.schedule}` : ""}`,
+      quantity: Math.max(1, 1000 - found.qtyOnHand),
+      unit: "pcs" as const,
+      requestedLength: found.length
+    };
+  }, [initialInventorySku, inventory]);
+
+  const candidates = useMemo(() => {
+    const merged = [...quoteShortages, ...inventoryRestock];
+    if (seedCandidate && !merged.some((c) => c.key === seedCandidate.key)) merged.push(seedCandidate);
+    return merged;
+  }, [inventoryRestock, quoteShortages, seedCandidate]);
   const visibleCandidates = useMemo(
     () => candidateFilter === "all" ? candidates : candidates.filter((c) => c.sourceContext === candidateFilter),
     [candidateFilter, candidates]
@@ -292,7 +316,12 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
       setSupplierLeadTime(14);
       setSupplierPreferred(false);
       setStatus("Supplier added to your network.");
-      await load();
+      if (Array.isArray(json.manufacturers) && json.manufacturers.length) {
+        setManufacturers(sortManufacturers(json.manufacturers));
+      } else if (json.manufacturer) {
+        setManufacturers((prev) => sortManufacturers([...prev, json.manufacturer]));
+      }
+      if (json.manufacturer?.id) setManufacturerId(json.manufacturer.id);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Failed to add supplier");
     } finally {

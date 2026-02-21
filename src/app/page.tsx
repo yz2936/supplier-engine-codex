@@ -666,6 +666,7 @@ export default function HomePage() {
                         setSendStatus("Sending...");
                         try {
                           const res = await fetch("/api/quote-email", {
+                            credentials: "include",
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({

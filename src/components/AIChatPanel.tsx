@@ -167,6 +167,7 @@ export function AIChatPanel({
       }
 
       const res = await fetch("/api/chat", {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: prompt, uploadedFile, context: { ...context, activeView }, llmProvider })

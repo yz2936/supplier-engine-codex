@@ -21,7 +21,7 @@ const smtpConfig = () => ({
 
 export async function POST(req: Request) {
   try {
-    const auth = await requireRole(req, ["sales_rep", "sales_manager"]);
+    const auth = await requireRole(req, ["sales_rep", "sales_manager", "inventory_manager"]);
     if (!auth.ok) return auth.response;
 
     const body = await req.json();
