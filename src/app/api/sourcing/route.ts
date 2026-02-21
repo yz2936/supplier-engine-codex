@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 import { SourcingRequestItem } from "@/lib/types";
 
@@ -58,29 +58,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "At least one sourcing item is required" }, { status: 400 });
   }
 
-  const data = await readData();
-  const manufacturer = data.manufacturers.find((m) => m.id === manufacturerId);
-  if (!manufacturer) {
-    return NextResponse.json({ error: "Manufacturer not found" }, { status: 404 });
-  }
+  const result = await mutateData((data) => {
+    const manufacturer = data.manufacturers.find((m) => m.id === manufacturerId);
+    if (!manufacturer) {
+      return { ok: false as const, status: 404 as const, error: "Manufacturer not found" };
+    }
 
-  const now = new Date().toISOString();
-  const request = {
-    id: crypto.randomUUID(),
-    createdByUserId: auth.user.id,
-    customerName,
-    manufacturerId: manufacturer.id,
-    manufacturerName: manufacturer.name,
-    status: "Open" as const,
-    reason,
-    sourceContext,
-    items,
-    notes,
-    createdAt: now,
-    updatedAt: now
-  };
+    const now = new Date().toISOString();
+    const request = {
+      id: crypto.randomUUID(),
+      createdByUserId: auth.user.id,
+      customerName,
+      manufacturerId: manufacturer.id,
+      manufacturerName: manufacturer.name,
+      status: "Open" as const,
+      reason,
+      sourceContext,
+      items,
+      notes,
+      createdAt: now,
+      updatedAt: now
+    };
 
-  data.sourcingRequests.push(request);
-  await writeData(data);
-  return NextResponse.json({ ok: true, request });
+    data.sourcingRequests.push(request);
+    return { ok: true as const, request };
+  });
+
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ ok: true, request: result.request });
 }

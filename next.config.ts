@@ -4,8 +4,9 @@ const isVercel = Boolean(process.env.VERCEL);
 
 const nextConfig: NextConfig = {
   distDir: isVercel ? ".next" : process.env.NEXT_DIST_DIR?.trim() || ".next",
-  experimental: {
-    typedRoutes: true
+  typedRoutes: true,
+  turbopack: {
+    root: process.cwd()
   }
 };
 

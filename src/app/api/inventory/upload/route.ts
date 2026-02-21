@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData } from "@/lib/data-store";
 import { parseInventoryFile } from "@/lib/inventory-file";
 import { requireRole } from "@/lib/server-auth";
 
@@ -20,9 +20,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to parse inventory file" }, { status: 400 });
   }
 
-  const data = await readData();
-  data.inventory = parsed;
-  await writeData(data);
+  await mutateData((data) => {
+    data.inventory = parsed;
+    return null;
+  });
 
   return NextResponse.json({ ok: true, count: parsed.length });
 }

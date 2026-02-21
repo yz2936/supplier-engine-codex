@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { createLlmClient, normalizeProvider } from "@/lib/llm-provider";
 import { requireUser } from "@/lib/server-auth";
 import { Manufacturer } from "@/lib/types";
@@ -326,26 +326,29 @@ const addSupplierFromMessage = async (message: string, role: string) => {
   const parsed = parseSupplierCreateIntent(message);
   if (!parsed) return "To add a supplier, provide at least supplier name/email. Example: Add supplier name: Atlas Stainless, email: rfq@atlas.com, specialties: pipe,tube, lead time: 18.";
 
-  const data = await readData();
-  const duplicate = data.manufacturers.some((m) => m.email.toLowerCase() === parsed.email || m.name.toLowerCase() === parsed.name.toLowerCase());
-  if (duplicate) return "Supplier already exists (same name or email).";
+  const added = await mutateData((data) => {
+    const duplicate = data.manufacturers.some((m) => m.email.toLowerCase() === parsed.email || m.name.toLowerCase() === parsed.name.toLowerCase());
+    if (duplicate) return null;
 
-  if (parsed.preferred) {
-    data.manufacturers = data.manufacturers.map((m) => ({ ...m, preferred: false }));
-  }
+    if (parsed.preferred) {
+      data.manufacturers = data.manufacturers.map((m) => ({ ...m, preferred: false }));
+    }
 
-  const supplier: Manufacturer = {
-    id: crypto.randomUUID(),
-    name: parsed.name,
-    email: parsed.email,
-    specialties: parsed.specialties.length ? parsed.specialties : ["General"],
-    leadTimeDays: parsed.leadTimeDays,
-    preferred: parsed.preferred
-  };
+    const supplier: Manufacturer = {
+      id: crypto.randomUUID(),
+      name: parsed.name,
+      email: parsed.email,
+      specialties: parsed.specialties.length ? parsed.specialties : ["General"],
+      leadTimeDays: parsed.leadTimeDays,
+      preferred: parsed.preferred
+    };
 
-  data.manufacturers.push(supplier);
-  await writeData(data);
-  return `Supplier added: ${supplier.name} (${supplier.email}).`;
+    data.manufacturers.push(supplier);
+    return supplier;
+  });
+
+  if (!added) return "Supplier already exists (same name or email).";
+  return `Supplier added: ${added.name} (${added.email}).`;
 };
 
 const sendSupplierEmailFromMessage = async (message: string, fromUserEmail: string) => {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 import { Quote } from "@/lib/types";
 
@@ -30,9 +30,9 @@ export async function POST(req: Request) {
     createdAt: new Date().toISOString()
   };
 
-  const data = await readData();
-  data.quotes.push(quote);
-  await writeData(data);
+  await mutateData((data) => {
+    data.quotes.push(quote);
+  });
 
   return NextResponse.json({ ok: true, quote });
 }

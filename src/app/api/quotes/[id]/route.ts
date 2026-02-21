@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -9,16 +9,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
 
-  const data = await readData();
-  const quote = data.quotes.find((q) => q.id === id);
-  if (!quote) return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+  const updated = await mutateData((data) => {
+    const quote = data.quotes.find((q) => q.id === id);
+    if (!quote) return { kind: "not_found" as const };
 
-  if (auth.user.role !== "sales_manager" && quote.createdByUserId !== auth.user.id) {
+    if (auth.user.role !== "sales_manager" && quote.createdByUserId !== auth.user.id) {
+      return { kind: "forbidden" as const };
+    }
+
+    if (body.status) quote.status = body.status;
+    return { kind: "ok" as const, quote };
+  });
+
+  if (updated.kind === "not_found") {
+    return NextResponse.json({ error: "Quote not found" }, { status: 404 });
+  }
+  if (updated.kind === "forbidden") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (body.status) quote.status = body.status;
-  await writeData(data);
-
-  return NextResponse.json({ ok: true, quote });
+  return NextResponse.json({ ok: true, quote: updated.quote });
 }

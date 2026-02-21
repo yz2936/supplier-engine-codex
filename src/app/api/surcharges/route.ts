@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { requireUser, requireRole } from "@/lib/server-auth";
 import { monthYear } from "@/lib/utils";
 
@@ -24,11 +24,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "grade is required" }, { status: 400 });
   }
 
-  const data = await readData();
-  const idx = data.surcharges.findIndex((s) => s.grade === grade && s.monthYear === month);
-  if (idx >= 0) data.surcharges[idx].valuePerLb = valuePerLb;
-  else data.surcharges.push({ grade, monthYear: month, valuePerLb });
+  const surcharges = await mutateData((data) => {
+    const idx = data.surcharges.findIndex((s) => s.grade === grade && s.monthYear === month);
+    if (idx >= 0) data.surcharges[idx].valuePerLb = valuePerLb;
+    else data.surcharges.push({ grade, monthYear: month, valuePerLb });
+    return data.surcharges;
+  });
 
-  await writeData(data);
-  return NextResponse.json({ ok: true, surcharges: data.surcharges });
+  return NextResponse.json({ ok: true, surcharges });
 }
