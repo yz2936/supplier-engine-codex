@@ -56,3 +56,13 @@ For stable long-running production testing:
   - inbound sync works
   - dashboard loads
 
+
+## Database Persistence
+
+Set these in Vercel Environment Variables so logins and history persist across deploys:
+
+- `DATABASE_URL`
+- `APP_STATE_KEY` (optional, default `main`)
+- `DATABASE_SSL` (optional, leave unset in Vercel)
+
+When `DATABASE_URL` is set, the app automatically stores all app state in Postgres and no longer relies on ephemeral `/tmp` storage.

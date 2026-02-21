@@ -1,17 +1,22 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { Pool } from "pg";
 import { AppData } from "@/lib/types";
 import { hashPassword, normalizeEmail } from "@/lib/security";
 
 const resolveDataPath = () => {
   const configured = process.env.DATA_PATH?.trim();
   if (configured) return configured;
-  // Vercel filesystem is read-only except /tmp.
   if (process.env.VERCEL) return path.join("/tmp", "app-data.json");
   return path.join(process.cwd(), "data", "app-data.json");
 };
 
 const dataPath = resolveDataPath();
+const dbUrl = process.env.DATABASE_URL?.trim();
+const appStateKey = process.env.APP_STATE_KEY?.trim() || "main";
+
+let pool: Pool | null = null;
+let dbReady = false;
 
 const defaultManufacturers: AppData["manufacturers"] = [
   {
@@ -107,6 +112,7 @@ const normalizeData = (raw: AppData): AppData => {
       createdAt: (user as { createdAt?: string }).createdAt ?? new Date().toISOString()
     };
   });
+
   return {
     inventory: raw.inventory ?? [],
     surcharges: raw.surcharges ?? [],
@@ -131,18 +137,94 @@ const normalizeData = (raw: AppData): AppData => {
   };
 };
 
-export const readData = async (): Promise<AppData> => {
+const usingDatabase = () => Boolean(dbUrl);
+
+const getPool = () => {
+  if (!dbUrl) throw new Error("DATABASE_URL is missing");
+  if (!pool) {
+    pool = new Pool({
+      connectionString: dbUrl,
+      ssl: process.env.DATABASE_SSL === "false" ? false : undefined
+    });
+  }
+  return pool;
+};
+
+const ensureDb = async () => {
+  if (dbReady) return;
+  const p = getPool();
+  await p.query(`
+    create table if not exists app_state (
+      id text primary key,
+      payload jsonb not null,
+      updated_at timestamptz not null default now()
+    );
+  `);
+  dbReady = true;
+};
+
+const readFromDb = async (): Promise<AppData> => {
+  await ensureDb();
+  const p = getPool();
+  const res = await p.query("select payload from app_state where id = $1 limit 1", [appStateKey]);
+  if (!res.rowCount) {
+    const seed = normalizeData(defaultData);
+    await p.query(
+      "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set payload = excluded.payload, updated_at = now()",
+      [appStateKey, JSON.stringify(seed)]
+    );
+    return seed;
+  }
+  return normalizeData(res.rows[0].payload as AppData);
+};
+
+const writeToDb = async (data: AppData) => {
+  await ensureDb();
+  const p = getPool();
+  const normalized = normalizeData(data);
+  await p.query(
+    "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do update set payload = excluded.payload, updated_at = now()",
+    [appStateKey, JSON.stringify(normalized)]
+  );
+};
+
+const readFromFile = async (): Promise<AppData> => {
   try {
     const raw = await fs.readFile(dataPath, "utf8");
     return normalizeData(JSON.parse(raw) as AppData);
   } catch {
+    const seed = normalizeData(defaultData);
     await fs.mkdir(path.dirname(dataPath), { recursive: true });
-    await fs.writeFile(dataPath, JSON.stringify(defaultData, null, 2));
-    return defaultData;
+    await fs.writeFile(dataPath, JSON.stringify(seed, null, 2));
+    return seed;
   }
 };
 
-export const writeData = async (data: AppData) => {
+const writeToFile = async (data: AppData) => {
+  const normalized = normalizeData(data);
   await fs.mkdir(path.dirname(dataPath), { recursive: true });
-  await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
+  await fs.writeFile(dataPath, JSON.stringify(normalized, null, 2));
+};
+
+export const readData = async (): Promise<AppData> => {
+  if (usingDatabase()) {
+    try {
+      return await readFromDb();
+    } catch (error) {
+      throw new Error(error instanceof Error ? `Database read failed: ${error.message}` : "Database read failed");
+    }
+  }
+  return readFromFile();
+};
+
+export const writeData = async (data: AppData) => {
+  if (usingDatabase()) {
+    try {
+      await writeToDb(data);
+      return;
+    } catch (error) {
+      throw new Error(error instanceof Error ? `Database write failed: ${error.message}` : "Database write failed");
+    }
+  }
+  await writeToFile(data);
 };
