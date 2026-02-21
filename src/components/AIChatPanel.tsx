@@ -193,7 +193,7 @@ export function AIChatPanel({
   };
 
   return (
-    <div className={`panel ${compact ? "flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3" : "space-y-3"}`}>
+    <div className={`panel panel-aurora ${compact ? "flex h-full min-h-0 flex-col gap-3 overflow-hidden p-3" : "space-y-3"}`}>
       <div className="flex items-center justify-between">
         <div>
           <div className="section-title">Assistant</div>

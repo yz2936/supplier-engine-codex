@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findManagerForInbound, upsertBuyerProfile, extractEmailAddress } from "@/lib/buyer-routing";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData } from "@/lib/data-store";
 import { filterInboundEmail } from "@/lib/inbound-filter";
 
 const parseJsonSafe = (raw: string) => {
@@ -90,32 +90,35 @@ export async function POST(req: Request) {
       });
     }
 
-    const data = await readData();
-    const manager = findManagerForInbound(data, to, subject);
-    if (!manager) {
+    const routed = await mutateData((data) => {
+      const manager = findManagerForInbound(data, to, subject);
+      if (!manager) return null;
+
+      const buyer = upsertBuyerProfile(data, manager.id, from);
+      data.buyerMessages.push({
+        id: crypto.randomUUID(),
+        buyerId: buyer.id,
+        managerUserId: manager.id,
+        direction: "inbound",
+        subject,
+        bodyText: text,
+        fromEmail: extractEmailAddress(from),
+        toEmail: extractEmailAddress(to),
+        receivedAt: new Date().toISOString()
+      });
+
+      buyer.status = "Active";
+      buyer.lastInteractionAt = new Date().toISOString();
+      buyer.updatedAt = new Date().toISOString();
+
+      return { managerId: manager.id, buyerId: buyer.id };
+    });
+
+    if (!routed) {
       return NextResponse.json({ error: "No sales manager available for routing" }, { status: 404 });
     }
 
-    const buyer = upsertBuyerProfile(data, manager.id, from);
-    data.buyerMessages.push({
-      id: crypto.randomUUID(),
-      buyerId: buyer.id,
-      managerUserId: manager.id,
-      direction: "inbound",
-      subject,
-      bodyText: text,
-      fromEmail: extractEmailAddress(from),
-      toEmail: extractEmailAddress(to),
-      receivedAt: new Date().toISOString()
-    });
-
-    buyer.status = "Active";
-    buyer.lastInteractionAt = new Date().toISOString();
-    buyer.updatedAt = new Date().toISOString();
-
-    await writeData(data);
-
-    return NextResponse.json({ ok: true, routedToManagerId: manager.id, buyerId: buyer.id });
+    return NextResponse.json({ ok: true, routedToManagerId: routed.managerId, buyerId: routed.buyerId });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Inbound routing failed";
     return NextResponse.json({ error: message }, { status: 500 });

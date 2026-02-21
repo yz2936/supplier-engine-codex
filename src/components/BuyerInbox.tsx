@@ -140,7 +140,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-      <div className="panel space-y-2">
+      <div className="panel panel-aurora space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div className="font-semibold">Buyer Profiles</div>
           <button
@@ -170,7 +170,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
       </div>
 
       <div className="space-y-4">
-        <div className="panel space-y-2">
+        <div className="panel panel-aurora space-y-2">
           <div className="font-semibold">Buyer Conversation</div>
           {selectedBuyer ? (
             <>
@@ -229,7 +229,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
         </div>
 
         {selectedBuyer && (
-          <div className="panel space-y-2">
+          <div className="panel panel-aurora space-y-2">
             <div className="font-semibold">Manager Notes</div>
             <select className="input" value={status} onChange={(e) => setStatus(e.target.value as Buyer["status"])}>
               <option>New</option>

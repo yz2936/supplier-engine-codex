@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData } from "@/lib/data-store";
 import { syncInboundMailboxForManager } from "@/lib/inbound-sync";
 import { requireRole } from "@/lib/server-auth";
 
@@ -11,9 +11,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({} as { limit?: number }));
     const limit = Math.max(1, Math.min(100, Number(body?.limit ?? 25)));
 
-    const data = await readData();
-    const result = await syncInboundMailboxForManager(data, auth.user, limit);
-    await writeData(data);
+    const result = await mutateData(async (data) => {
+      return syncInboundMailboxForManager(data, auth.user, limit);
+    });
 
     return NextResponse.json({
       ok: true,

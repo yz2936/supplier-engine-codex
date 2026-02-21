@@ -20,11 +20,11 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
   if (!enabled) return null;
 
   return (
-    <div className="panel overflow-auto">
+    <div className="panel panel-aurora overflow-auto">
       <div className="mb-2 font-semibold">Quote History</div>
-      <table className="min-w-full text-sm">
+      <table className="data-grid">
         <thead>
-          <tr className="border-b border-steel-200 text-left">
+          <tr>
             <th className="py-2 pr-3">Date</th>
             <th className="py-2 pr-3">Customer</th>
             <th className="py-2 pr-3">Total</th>
@@ -33,7 +33,7 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
         </thead>
         <tbody>
           {quotes.map((q) => (
-            <tr key={q.id} className="border-b border-steel-100">
+            <tr key={q.id}>
               <td className="py-2 pr-3">{new Date(q.createdAt).toLocaleString()}</td>
               <td className="py-2 pr-3">{q.customerName}</td>
               <td className="py-2 pr-3">{money(q.totalPrice)}</td>

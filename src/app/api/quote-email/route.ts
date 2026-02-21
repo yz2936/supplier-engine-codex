@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData } from "@/lib/data-store";
 import { draftQuoteHtml, draftQuoteText, QuoteDraftMeta } from "@/lib/format";
 import { upsertBuyerProfile } from "@/lib/buyer-routing";
 import { requireRole } from "@/lib/server-auth";
@@ -12,10 +12,9 @@ const smtpConfig = () => ({
   secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
   auth: process.env.SMTP_USER && process.env.SMTP_PASS
     ? {
-        user: process.env.SMTP_USER.trim(),
-        // Gmail app passwords are often copied with spaces every 4 chars.
-        pass: process.env.SMTP_PASS.replace(/\s+/g, "")
-      }
+      user: process.env.SMTP_USER.trim(),
+      pass: process.env.SMTP_PASS.replace(/\s+/g, "")
+    }
     : undefined
 });
 
@@ -62,29 +61,30 @@ export async function POST(req: Request) {
       replyTo: auth.user.email
     });
 
-    const data = await readData();
-    const buyer = upsertBuyerProfile(data, auth.user.id, buyerEmail, customerName);
-    data.buyerMessages.push({
-      id: crypto.randomUUID(),
-      buyerId: buyer.id,
-      managerUserId: auth.user.id,
-      direction: "outbound",
-      subject,
-      bodyText: text,
-      fromEmail: fromAddress || auth.user.email,
-      toEmail: buyerEmail,
-      receivedAt: new Date().toISOString()
+    await mutateData((data) => {
+      const buyer = upsertBuyerProfile(data, auth.user.id, buyerEmail, customerName);
+      data.buyerMessages.push({
+        id: crypto.randomUUID(),
+        buyerId: buyer.id,
+        managerUserId: auth.user.id,
+        direction: "outbound",
+        subject,
+        bodyText: text,
+        fromEmail: fromAddress || auth.user.email,
+        toEmail: buyerEmail,
+        receivedAt: new Date().toISOString()
+      });
+      data.quotes.push({
+        id: crypto.randomUUID(),
+        customerName,
+        createdByUserId: auth.user.id,
+        itemsQuoted: lines,
+        totalPrice: total,
+        status: "Sent",
+        createdAt: new Date().toISOString()
+      });
+      return null;
     });
-    data.quotes.push({
-      id: crypto.randomUUID(),
-      customerName,
-      createdByUserId: auth.user.id,
-      itemsQuoted: lines,
-      totalPrice: total,
-      status: "Sent",
-      createdAt: new Date().toISOString()
-    });
-    await writeData(data);
 
     return NextResponse.json({ ok: true, message: `Quote email sent to ${buyerEmail}` });
   } catch (err) {

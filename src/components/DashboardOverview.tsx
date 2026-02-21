@@ -172,7 +172,7 @@ export function DashboardOverview() {
 
   return (
     <div className="space-y-4">
-      <div className="panel flex items-center justify-between">
+      <div className="panel panel-aurora flex items-center justify-between">
         <div>
           <div className="section-title">Dashboard</div>
           <div className="font-semibold">Operations Snapshot</div>
@@ -241,7 +241,7 @@ export function DashboardOverview() {
           </div>
         </div>
 
-        <div className="panel space-y-3">
+        <div className="panel panel-aurora space-y-3">
           <div className="font-semibold">Workflow Signals</div>
           <div className="rounded-lg border border-steel-200 bg-steel-50 p-3 text-sm">
             <div className="font-medium">Buyer Intake</div>
@@ -266,7 +266,7 @@ export function DashboardOverview() {
         </div>
       </div>
 
-      {error && <div className="panel text-sm text-rose-600">{error}</div>}
+      {error && <div className="panel panel-aurora text-sm text-rose-600">{error}</div>}
     </div>
   );
 }

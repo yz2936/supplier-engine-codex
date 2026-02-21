@@ -392,7 +392,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
         </div>
       </div>
 
-      <div className="panel space-y-3">
+      <div className="panel panel-aurora space-y-3">
         <div className="font-semibold">Supplier Network</div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
           <input
@@ -484,7 +484,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
         </div>
       </div>
 
-      <div className="panel space-y-3">
+      <div className="panel panel-aurora space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-semibold">Candidate Items</div>
           <div className="flex flex-wrap gap-2">
@@ -553,7 +553,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
         {status && <div className="text-xs text-steel-700">{status}</div>}
       </div>
 
-      <div className="panel space-y-2">
+      <div className="panel panel-aurora space-y-2">
         <div className="font-semibold">Sourcing Queue</div>
         {emailingRequestId && (
           <div className="space-y-2 rounded-xl border border-steel-200 bg-steel-50 p-3">

@@ -378,7 +378,7 @@ export default function HomePage() {
   if (!user) {
     return (
       <main className="mx-auto min-h-screen max-w-md p-6">
-        <div className="panel space-y-4">
+        <div className="panel panel-aurora space-y-4">
           <div>
             <h1 className="text-2xl font-bold text-steel-800">Stainless Logic</h1>
             <p className="text-sm text-steel-700">Sign in to access your quoting workspace.</p>
@@ -449,7 +449,7 @@ export default function HomePage() {
   if (!user.onboarded) {
     return (
       <main className="mx-auto min-h-screen max-w-xl p-6">
-        <div className="panel space-y-4">
+        <div className="panel panel-aurora space-y-4">
           <h1 className="text-2xl font-bold">Onboarding</h1>
           <p className="text-sm text-steel-700">Set your profile so the workspace matches your role and permissions.</p>
           <input className="input" value={onboardingName} onChange={(e) => setOnboardingName(e.target.value)} placeholder="Your full name" />
@@ -478,9 +478,9 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1700px] p-4 md:p-6">
-      <div className={`grid grid-cols-1 gap-4 lg:grid-cols-[230px_minmax(0,1fr)] ${chatOpen ? "xl:grid-cols-[230px_minmax(0,1fr)_400px]" : ""}`}>
-        <aside className="panel h-fit space-y-3 lg:sticky lg:top-4">
+    <main className="app-shell mx-auto min-h-screen max-w-[1700px] p-4 md:p-6">
+      <div className={`grid grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] ${chatOpen ? "xl:grid-cols-[250px_minmax(0,1fr)_400px]" : ""}`}>
+        <aside className="panel panel-aurora h-fit space-y-3 lg:sticky lg:top-4">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <h1 className="text-xl font-bold text-steel-900">Stainless Logic</h1>
@@ -498,6 +498,7 @@ export default function HomePage() {
 
           <nav className={`space-y-1.5 ${mobileNavOpen ? "block" : "hidden"} lg:block`}>
             <div className="section-title">Navigation</div>
+            <div className="neo-chip">⚡ Command Center</div>
             {([
               "dashboard",
               "workspace",
@@ -541,9 +542,9 @@ export default function HomePage() {
         </aside>
 
         <section className="min-w-0 space-y-4">
-          <header className="panel flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <header className="panel panel-aurora flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
-              <div className="section-title">Dashboard</div>
+              <div className="section-title">Intelligent Supplier OS</div>
               <h2 className="text-2xl font-semibold text-steel-900">{viewMeta[activeView].label}</h2>
               <p className="text-sm text-steel-700">{viewMeta[activeView].hint}</p>
             </div>
@@ -594,7 +595,7 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4">
-              <section className="panel space-y-3">
+              <section className="panel panel-aurora space-y-3">
                 <div>
                   <div className="section-title">Step 1</div>
                   <div className="font-semibold">RFQ Input Workspace</div>
@@ -705,7 +706,7 @@ export default function HomePage() {
 
               <section className="space-y-4">
                 <ResultsTable lines={lines} />
-                <div className="panel flex items-center justify-between">
+                <div className="panel panel-aurora flex items-center justify-between">
                   <div>
                     <div className="section-title">Step 2</div>
                     <div className="text-lg font-semibold">Quote Total</div>
@@ -722,7 +723,7 @@ export default function HomePage() {
               <div className="grid grid-cols-1 gap-4">
                 {canUploadInventory(role)
                   ? <InventoryUploader onUploaded={loadInventoryCount} />
-                  : <div className="panel text-sm text-steel-700">Only Inventory Managers and Sales Managers can upload inventory snapshots.</div>}
+                  : <div className="panel panel-aurora text-sm text-steel-700">Only Inventory Managers and Sales Managers can upload inventory snapshots.</div>}
               </div>
               <InventoryCatalogManager
                 editable={canUploadInventory(role)}
@@ -746,17 +747,17 @@ export default function HomePage() {
           {activeView === "quotes" && (
             canGenerateQuotes(role)
               ? <QuoteHistory enabled />
-              : <div className="panel text-sm text-steel-700">Your role cannot access quote generation/history.</div>
+              : <div className="panel panel-aurora text-sm text-steel-700">Your role cannot access quote generation/history.</div>
           )}
 
           {activeView === "buyers" && (
             role === "sales_manager"
               ? <BuyerInbox onStartQuote={startQuoteFromBuyerMessage} />
-              : <div className="panel text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
+              : <div className="panel panel-aurora text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
           )}
 
           {activeView === "settings" && (
-            <div className="panel space-y-2 text-sm">
+            <div className="panel panel-aurora space-y-2 text-sm">
               <div><span className="font-medium">Name:</span> {user.name}</div>
               <div><span className="font-medium">Email:</span> {user.email}</div>
               <div><span className="font-medium">Company:</span> {user.companyName}</div>
@@ -797,7 +798,7 @@ export default function HomePage() {
         )}
       </div>
       <button
-        className="fixed bottom-4 right-4 z-40 rounded-full bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-teal-800"
+        className="fixed bottom-4 right-4 z-40 rounded-full bg-gradient-to-r from-teal-600 via-cyan-600 to-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(8,145,178,0.35)] hover:from-teal-700 hover:via-cyan-700 hover:to-teal-800"
         onClick={() => setChatOpen((v) => !v)}
       >
         {chatOpen ? "Hide Copilot" : "Show Copilot"}

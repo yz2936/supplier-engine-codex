@@ -8,7 +8,7 @@ export function SurchargePanel({ onSaved }: { onSaved: () => void }) {
   const [status, setStatus] = useState("");
 
   return (
-    <div className="panel space-y-2">
+    <div className="panel panel-aurora space-y-2">
       <div className="font-semibold">Monthly Surcharge</div>
       <div className="grid grid-cols-2 gap-2">
         <input className="input" value={grade} onChange={(e) => setGrade(e.target.value.toUpperCase())} placeholder="Grade" />

@@ -26,7 +26,7 @@ export function InventoryUploader({ onUploaded }: { onUploaded: () => void }) {
   };
 
   return (
-    <div className="panel space-y-2">
+    <div className="panel panel-aurora space-y-2">
       <div className="font-semibold">Inventory Upload (CSV / Excel)</div>
       <input
         type="file"

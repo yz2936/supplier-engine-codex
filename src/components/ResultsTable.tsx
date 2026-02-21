@@ -5,14 +5,14 @@ import { money, stockColor, stockLabel } from "@/lib/format";
 
 export function ResultsTable({ lines }: { lines: QuoteLine[] }) {
   return (
-    <div className="panel overflow-auto">
+    <div className="panel panel-aurora overflow-auto">
       <div className="mb-2">
         <div className="section-title">Parsed Output</div>
         <div className="font-semibold">Structured Product Table</div>
       </div>
-      <table className="min-w-full text-sm">
-        <thead className="bg-steel-50">
-          <tr className="border-b border-steel-200 text-left text-steel-700">
+      <table className="data-grid">
+        <thead>
+          <tr>
             <th className="py-2 pr-3">Status</th>
             <th className="py-2 pr-3">Product Type</th>
             <th className="py-2 pr-3">Grade</th>
@@ -25,7 +25,7 @@ export function ResultsTable({ lines }: { lines: QuoteLine[] }) {
         </thead>
         <tbody>
           {lines.map((l, i) => (
-            <tr key={`${l.sku || "na"}-${i}`} className="border-b border-steel-100 align-top odd:bg-white even:bg-steel-50/40">
+            <tr key={`${l.sku || "na"}-${i}`}>
               <td className="py-2 pr-3">
                 <div className="flex items-center gap-2">
                   <span className={`h-3 w-3 rounded-full ${stockColor(l.stockStatus)}`} />

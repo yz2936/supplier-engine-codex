@@ -168,7 +168,7 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
     || (draftBasePrice[item.sku] ?? item.basePrice) !== item.basePrice;
 
   return (
-    <div className="panel space-y-3">
+    <div className="panel panel-aurora space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="section-title">Inventory Control</div>
@@ -240,9 +240,9 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
         </button>
       </div>
       <div className="overflow-auto">
-        <table className="min-w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-white">
-            <tr className="border-b border-steel-200 text-left text-steel-700">
+        <table className="data-grid">
+          <thead className="sticky top-0 z-10">
+            <tr>
               <th className="py-2 pr-3">SKU</th>
               <th className="py-2 pr-3">Type</th>
               <th className="py-2 pr-3">Grade</th>
@@ -259,7 +259,7 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
             {filtered.map(({ item, rec, suggested }) => {
               const currentQty = draftQtyOnHand[item.sku] ?? item.qtyOnHand;
               return (
-                <tr key={item.sku} className="border-b border-steel-100 align-top hover:bg-steel-50/70">
+                <tr key={item.sku} className="hover:bg-cyan-50/40">
                 <td className="py-2 pr-3">{item.sku}</td>
                 <td className="py-2 pr-3">{item.category}</td>
                 <td className="py-2 pr-3">{item.grade}</td>

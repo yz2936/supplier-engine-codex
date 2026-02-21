@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { readData, writeData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 
 const smtpConfig = () => ({
@@ -9,9 +9,9 @@ const smtpConfig = () => ({
   secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
   auth: process.env.SMTP_USER && process.env.SMTP_PASS
     ? {
-        user: process.env.SMTP_USER.trim(),
-        pass: process.env.SMTP_PASS.replace(/\s+/g, "")
-      }
+      user: process.env.SMTP_USER.trim(),
+      pass: process.env.SMTP_PASS.replace(/\s+/g, "")
+    }
     : undefined
 });
 
@@ -76,9 +76,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const data = await readData();
-    const requestIndex = data.sourcingRequests.findIndex((r) => r.id === id);
-    if (requestIndex < 0) return NextResponse.json({ error: "Sourcing request not found" }, { status: 404 });
-    const request = data.sourcingRequests[requestIndex];
+    const request = data.sourcingRequests.find((r) => r.id === id);
+    if (!request) return NextResponse.json({ error: "Sourcing request not found" }, { status: 404 });
 
     const manufacturer = data.manufacturers.find((m) => m.id === request.manufacturerId);
     const recipient = to || manufacturer?.email || request.manufacturerEmail || "";
@@ -90,7 +89,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const text = overrideMessage || buildDefaultBody(request);
     const html = text
       .split("\n")
-      .map((line) => line.trim() ? `<p style="margin:0 0 8px 0;">${escapeHtml(line)}</p>` : "<br/>")
+      .map((line) => line.trim() ? `<p style=\"margin:0 0 8px 0;\">${escapeHtml(line)}</p>` : "<br/>")
       .join("");
 
     const transporter = nodemailer.createTransport(cfg);
@@ -105,15 +104,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
 
     const now = new Date().toISOString();
-    data.sourcingRequests[requestIndex] = {
-      ...request,
-      manufacturerEmail: recipient,
-      lastEmailedAt: now,
-      lastEmailedByUserId: auth.user.id,
-      lastEmailSubject: subject,
-      updatedAt: now
-    };
-    await writeData(data);
+    await mutateData((next) => {
+      const requestIndex = next.sourcingRequests.findIndex((r) => r.id === id);
+      if (requestIndex < 0) return null;
+      const current = next.sourcingRequests[requestIndex];
+      next.sourcingRequests[requestIndex] = {
+        ...current,
+        manufacturerEmail: recipient,
+        lastEmailedAt: now,
+        lastEmailedByUserId: auth.user.id,
+        lastEmailSubject: subject,
+        updatedAt: now
+      };
+      return null;
+    });
 
     return NextResponse.json({ ok: true, message: `Sourcing email sent to ${recipient}` });
   } catch (err) {
@@ -121,4 +125,3 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
