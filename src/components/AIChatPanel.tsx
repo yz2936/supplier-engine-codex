@@ -36,6 +36,21 @@ type Props = {
   onRefreshInventory?: () => Promise<void>;
 };
 
+const isTextSpecFile = (name: string) => {
+  const n = name.toLowerCase();
+  return n.endsWith(".txt") || n.endsWith(".eml") || n.endsWith(".md") || n.endsWith(".rtf") || n.endsWith(".spec") || n.endsWith(".json") || n.endsWith(".xml");
+};
+
+const isPdfFile = (name: string) => name.toLowerCase().endsWith(".pdf");
+
+const extractPdfTextFallback = async (file: File) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const text = new TextDecoder("latin1").decode(bytes);
+  const chunks = text.match(/[A-Za-z0-9][A-Za-z0-9 ,.:;()\/#%+\-\n]{18,}/g) || [];
+  const joined = chunks.join(" ").replace(/\s+/g, " ").trim();
+  return joined.slice(0, 12000);
+};
+
 export function AIChatPanel({
   activeView,
   role,
@@ -50,12 +65,7 @@ export function AIChatPanel({
   onNavigateView,
   onRefreshInventory
 }: Props) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Ask me in natural language. Example: 'Set margin to 18% and parse this RFQ.' You can also attach CSV/XLSX/XLS inventory files or TXT/EML/MD RFQ files."
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -126,7 +136,6 @@ export function AIChatPanel({
       if (file) {
         const name = file.name.toLowerCase();
         const isInventory = name.endsWith(".csv") || name.endsWith(".xlsx") || name.endsWith(".xls");
-        const isText = name.endsWith(".txt") || name.endsWith(".eml") || name.endsWith(".md");
 
         if (isInventory) {
           if (!canUpload) {
@@ -137,11 +146,21 @@ export function AIChatPanel({
           const uploadMessage = await onUploadInventoryFile(file);
           uploadedFile = { kind: "inventory_file", name: file.name };
           push({ role: "assistant", content: uploadMessage });
-        } else if (isText) {
+        } else if (isTextSpecFile(name)) {
           const text = await file.text();
           uploadedFile = { kind: "rfq_text", text, name: file.name };
+          push({ role: "assistant", content: `Loaded specification document: ${file.name}` });
+        } else if (isPdfFile(name)) {
+          const text = await extractPdfTextFallback(file);
+          if (!text.trim()) {
+            push({ role: "assistant", content: "Could not extract readable text from this PDF. Please paste the key specification text directly in chat." });
+            setBusy(false);
+            return;
+          }
+          uploadedFile = { kind: "rfq_text", text, name: file.name };
+          push({ role: "assistant", content: `Loaded PDF specification: ${file.name}` });
         } else {
-          push({ role: "assistant", content: "Unsupported file type. Use CSV/XLSX/XLS for inventory or TXT/EML/MD for RFQ text." });
+          push({ role: "assistant", content: "Unsupported file type. Use CSV/XLSX/XLS for inventory, or TXT/MD/EML/RTF/JSON/XML/PDF for industrial specs." });
           setBusy(false);
           return;
         }
@@ -150,7 +169,7 @@ export function AIChatPanel({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: prompt, uploadedFile, context: { ...context, activeView } })
+        body: JSON.stringify({ message: prompt, uploadedFile, context: { ...context, activeView }, llmProvider })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Chat request failed");
@@ -200,6 +219,11 @@ export function AIChatPanel({
       </div>
 
       <div className={`${compact ? "min-h-0 flex-1" : "max-h-72"} space-y-2 overflow-auto rounded-xl border border-steel-200 bg-steel-50 p-2`}>
+        {!messages.length && (
+          <div className="rounded-lg bg-white px-2 py-2 text-sm text-steel-600">
+            Ask anything about industrial sourcing: add suppliers, assess supplier history/risk, analyze inventory, parse spec documents, or draft/send supplier emails.
+          </div>
+        )}
         {messages.map((m, i) => (
           <div key={`${m.role}-${i}`} className={m.role === "assistant" ? "rounded-lg bg-white px-2 py-1 text-sm" : "rounded-lg border border-teal-100 bg-teal-50 px-2 py-1 text-sm font-medium"}>
             <span className="mr-2 text-xs uppercase text-steel-600">{m.role}</span>
@@ -221,18 +245,18 @@ export function AIChatPanel({
           )}
           {activeView === "inventory" && (
             <>
+              <button className="btn-secondary" onClick={() => void send("Analyze inventory risk and summarize low stock and out of stock categories")}>Analyze Inventory</button>
               <button className="btn-secondary" onClick={() => void onRefreshInventory?.()}>Refresh Inventory</button>
               <button className="btn-secondary" onClick={() => onNavigateView?.("sourcing")}>Open Sourcing</button>
               <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
-              <button className="btn-secondary" onClick={() => void send("Check logistics completeness from the current RFQ and tell me what is missing")}>Logistics Check</button>
             </>
           )}
           {activeView === "sourcing" && (
             <>
-              <button className="btn-secondary" onClick={() => void send("Suggest margin impact for low stock and upstream sourcing risk")}>Risk Margin</button>
+              <button className="btn-secondary" onClick={() => void send("Assess supplier history and risk for preferred suppliers")}>Assess Suppliers</button>
+              <button className="btn-secondary" onClick={() => void send("Draft supplier outreach email for low stock sourcing request")}>Draft Supplier Email</button>
               <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Back to Inventory</button>
               <button className="btn-secondary" onClick={() => onNavigateView?.("buyers")}>Open Buyers</button>
-              <button className="btn-secondary" onClick={() => void send("Summarize next sourcing actions and buyer communication plan")}>Next Steps</button>
             </>
           )}
           {activeView === "buyers" && (
@@ -248,7 +272,7 @@ export function AIChatPanel({
               <button className="btn-secondary" onClick={() => onNavigateView?.("workspace")}>Open Workspace</button>
               <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Open Inventory</button>
               <button className="btn-secondary" onClick={() => onNavigateView?.("sourcing")}>Open Sourcing</button>
-              <button className="btn-secondary" onClick={() => void send("Suggest pricing margin based on risk and apply suggested margin")}>Suggest Margin</button>
+              <button className="btn-secondary" onClick={() => void send("Analyze inventory risk and summarize low stock and out of stock categories")}>Inventory Risk</button>
             </>
           )}
         </div>
@@ -258,13 +282,13 @@ export function AIChatPanel({
         className="input min-h-20"
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Ask naturally: set margin, parse RFQ, save quote, upload inventory..."
+        placeholder="Ask naturally: add supplier, assess supplier history, email supplier, parse specs, analyze inventory..."
       />
 
       <input
         type="file"
         className="input"
-        accept=".csv,.xlsx,.xls,.txt,.eml,.md"
+        accept=".csv,.xlsx,.xls,.txt,.eml,.md,.rtf,.json,.xml,.pdf,.spec"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
 
