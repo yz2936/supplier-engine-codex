@@ -67,6 +67,7 @@ export function QuotingEngineScreen() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [globalSearch, setGlobalSearch] = useState("");
   const [search, setSearch] = useState("");
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [rowSort, setRowSort] = useState<{ key: keyof LineItem; dir: "asc" | "desc" }>({
     key: "lineNumber",
     dir: "asc"
@@ -122,7 +123,11 @@ export function QuotingEngineScreen() {
     if (!selectedLine) {
       setDrawerMatch(null);
       setDrawerRisks([]);
+      setDrawerOpen(false);
       return;
+    }
+    if (typeof window !== "undefined" && window.innerWidth >= 1280) {
+      setDrawerOpen(true);
     }
     (async () => {
       const [match, risks] = await Promise.all([getInventoryMatch(selectedLine), getRiskFlags(selectedLine)]);
@@ -233,7 +238,7 @@ export function QuotingEngineScreen() {
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1700px] items-center gap-3 px-4 py-3">
-          <div className="text-lg font-semibold tracking-tight">Quoting Engine</div>
+          <div className="text-base font-semibold tracking-tight">Quoting Engine</div>
           <div className="max-w-md flex-1">
             <input
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
@@ -249,7 +254,7 @@ export function QuotingEngineScreen() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <main className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 px-4 py-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
         <aside
           className={`rounded-xl border border-slate-200 bg-white transition-all ${queueCollapsed ? "w-[78px] overflow-hidden" : "w-full"}`}
         >
@@ -353,7 +358,7 @@ export function QuotingEngineScreen() {
           </div>
         </aside>
 
-        <section className="space-y-4">
+        <section className="space-y-3 xl:col-start-2">
           {workspaceLoading && (
             <div className="space-y-3">
               <div className="h-16 animate-pulse rounded-xl bg-white" />
@@ -372,7 +377,7 @@ export function QuotingEngineScreen() {
               <div className={`${sectionClass} flex flex-wrap items-center justify-between gap-3`}>
                 <div>
                   <div className="text-sm font-semibold">Quote Workspace</div>
-                  <div className="text-xs text-slate-500">Keep edits compact and explicit. Required fields are highlighted.</div>
+                  <div className="text-xs text-slate-500">Review, edit, and send with minimum clicks.</div>
                 </div>
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
                   <div className="mb-1 font-medium text-slate-700">Checklist</div>
@@ -397,7 +402,7 @@ export function QuotingEngineScreen() {
               <section className={sectionClass}>
                 <div className="mb-2 text-sm font-semibold">A. RFQ Summary</div>
                 <p className="mb-3 text-xs text-slate-500">Review source context first, then confirm line structure below.</p>
-                <div className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-5">
+                <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-2 lg:grid-cols-5">
                   <div><span className="text-slate-500">Customer</span><div className="font-medium">{workspace.customerName}</div></div>
                   <div><span className="text-slate-500">RFQ ID</span><div className="font-medium">{workspace.id}</div></div>
                   <div><span className="text-slate-500">Received</span><div className="font-medium">{new Date(workspace.receivedAt).toLocaleString()}</div></div>
@@ -459,6 +464,7 @@ export function QuotingEngineScreen() {
                       };
                       setWorkspace((prev) => (prev ? { ...prev, lineItems: [...prev.lineItems, next] } : prev));
                       setSelectedLineId(next.id);
+                      if (typeof window !== "undefined" && window.innerWidth < 1280) setDrawerOpen(true);
                     }}
                   >
                     Add row
@@ -530,7 +536,10 @@ export function QuotingEngineScreen() {
                           <tr
                             key={line.id}
                             className={`cursor-pointer border-b border-slate-100 ${selectedLineId === line.id ? "bg-slate-50" : "bg-white hover:bg-slate-50/50"}`}
-                            onClick={() => setSelectedLineId(line.id)}
+                            onClick={() => {
+                              setSelectedLineId(line.id);
+                              if (typeof window !== "undefined" && window.innerWidth < 1280) setDrawerOpen(true);
+                            }}
                           >
                             <td className="px-2 py-1.5">{line.lineNumber}</td>
                             <td className="px-2 py-1.5">
@@ -644,15 +653,32 @@ export function QuotingEngineScreen() {
                   )}
                 </div>
               </section>
+
+              {selectedLine && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600 xl:hidden">
+                  Selected line: <span className="font-medium text-slate-800">#{selectedLine.lineNumber}</span>. Open details from table row.
+                </div>
+              )}
             </>
           )}
         </section>
 
         {!workspaceLoading && workspace && selectedLine && (
-          <aside className="fixed inset-y-0 right-0 z-30 w-full border-l border-slate-200 bg-white p-4 shadow-xl lg:static lg:h-fit lg:w-[360px] lg:rounded-xl lg:border">
+          <>
+            {drawerOpen && <button className="fixed inset-0 z-20 bg-slate-900/30 xl:hidden" onClick={() => setDrawerOpen(false)} aria-label="Close drawer backdrop" />}
+            <aside
+              className={`fixed inset-y-0 right-0 z-30 w-full border-l border-slate-200 bg-white p-4 shadow-xl transition-transform duration-200 sm:w-[420px] xl:static xl:col-start-3 xl:h-fit xl:w-[360px] xl:translate-x-0 xl:rounded-xl xl:border ${
+                drawerOpen ? "translate-x-0" : "translate-x-full xl:translate-x-0"
+              }`}
+            >
             <div className="mb-2 flex items-center justify-between">
               <div className="text-sm font-semibold">D. Line Item Drawer</div>
-              <button className="rounded-md border border-slate-300 px-2 py-1 text-xs lg:hidden" onClick={() => setSelectedLineId("")}>Close</button>
+              <button
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs xl:hidden"
+                onClick={() => setDrawerOpen(false)}
+              >
+                Close
+              </button>
             </div>
             <p className="mb-3 text-xs text-slate-500">Adjust detailed values here; keep table edits quick and minimal.</p>
 
@@ -725,10 +751,11 @@ export function QuotingEngineScreen() {
               </button>
             </div>
           </aside>
+          </>
         )}
 
         {!workspaceLoading && workspace && !selectedLine && (
-          <aside className="hidden rounded-xl border border-dashed border-slate-300 bg-white p-4 text-xs text-slate-600 lg:block">
+          <aside className="hidden rounded-xl border border-dashed border-slate-300 bg-white p-4 text-xs text-slate-600 xl:col-start-3 xl:block">
             <div className="mb-1 text-sm font-semibold text-slate-800">Line Item Drawer</div>
             <p>Select a line item to view inventory match, risks, and advanced cost fields.</p>
           </aside>
