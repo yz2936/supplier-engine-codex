@@ -25,7 +25,7 @@ import {
 
 type Toast = { id: string; message: string };
 
-const sectionClass = "border-b border-slate-200 pb-5";
+const sectionClass = "border-t border-slate-200 pt-5 first:border-t-0 first:pt-0";
 
 const emptyFilters: QueueFilters = { customer: "", dueDate: "", status: "all" };
 
@@ -249,9 +249,9 @@ export function QuotingEngineScreen() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <main className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside
-          className={`rounded-xl border border-slate-200 bg-white transition-all ${queueCollapsed ? "w-[78px] overflow-hidden" : "w-full"}`}
+          className={`border border-slate-200 bg-white transition-all ${queueCollapsed ? "w-[78px] overflow-hidden" : "w-full"}`}
         >
           <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3">
             {!queueCollapsed && <div className="text-sm font-semibold">Work Queue</div>}
@@ -322,7 +322,7 @@ export function QuotingEngineScreen() {
               visibleRfqs.map((rfq) => (
                 <button
                   key={rfq.id}
-                  className={`w-full rounded-lg border p-3 text-left text-xs ${
+                  className={`w-full border p-3 text-left text-xs ${
                     selectedRfqId === rfq.id ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"
                   }`}
                   onClick={() => setSelectedRfqId(rfq.id)}
@@ -353,11 +353,11 @@ export function QuotingEngineScreen() {
           </div>
         </aside>
 
-        <section className="space-y-4">
+        <section className="border border-slate-200 bg-white p-4">
           {workspaceLoading && (
             <div className="space-y-3">
-              <div className="h-16 animate-pulse rounded-xl bg-white" />
-              <div className="h-72 animate-pulse rounded-xl bg-white" />
+              <div className="h-16 animate-pulse bg-slate-100" />
+              <div className="h-72 animate-pulse bg-slate-100" />
             </div>
           )}
 
@@ -369,22 +369,29 @@ export function QuotingEngineScreen() {
 
           {!workspaceLoading && workspace && (
             <>
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 text-xs">
-                {[
-                  { label: "Parse complete", ok: checklist.parseComplete },
-                  { label: "Required fields filled", ok: checklist.requiredFilled },
-                  { label: "Terms reviewed", ok: checklist.termsReviewed },
-                  { label: "Ready to send", ok: checklist.readyToSend }
-                ].map((step) => (
-                  <span
-                    key={step.label}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${
-                      step.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"
-                    }`}
-                  >
-                    {step.ok ? "✓" : "•"} {step.label}
-                  </span>
-                ))}
+              <div className="grid gap-3 border-b border-slate-200 pb-4 lg:grid-cols-[1.2fr_1fr]">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Overview</div>
+                  <div className="mt-1 text-2xl font-semibold text-slate-900">Quote Workspace</div>
+                  <div className="mt-1 text-sm text-slate-600">Keep edits concise and move line-by-line from summary to pricing.</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    { label: "Parse complete", ok: checklist.parseComplete },
+                    { label: "Required fields filled", ok: checklist.requiredFilled },
+                    { label: "Terms reviewed", ok: checklist.termsReviewed },
+                    { label: "Ready to send", ok: checklist.readyToSend }
+                  ].map((step) => (
+                    <span
+                      key={step.label}
+                      className={`inline-flex items-center gap-1 border px-2 py-2 ${
+                        step.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"
+                      }`}
+                    >
+                      {step.ok ? "✓" : "•"} {step.label}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               <section className={sectionClass}>
@@ -398,18 +405,18 @@ export function QuotingEngineScreen() {
                   <div><span className="text-slate-500">Project</span><div className="font-medium">{workspace.projectName || "-"}</div></div>
                 </div>
                 <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-                  <div className="border border-slate-200 p-3 text-xs">
+                  <div className="p-3 text-xs">
                     <div className="mb-1 font-medium text-slate-700">Source Files</div>
                     <div className="space-y-1">
                       {workspace.sourceFiles.map((f) => (
-                        <div key={f.id} className="flex items-center justify-between border border-slate-200 px-2 py-1">
+                        <div key={f.id} className="flex items-center justify-between border-b border-slate-200 px-2 py-1">
                           <span>{f.name}</span>
                           <button className="text-slate-700 underline">View</button>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="border border-slate-200 p-3 text-xs">
+                  <div className="p-3 text-xs">
                     <div className="mb-1 font-medium text-slate-700">Key Notes</div>
                     <p className="leading-5 text-slate-700">{workspace.keyNotes || "No key notes available."}</p>
                   </div>
@@ -422,7 +429,7 @@ export function QuotingEngineScreen() {
                     <div className="text-sm font-semibold">B. Line Items</div>
                     <p className="text-xs text-slate-500">Inline edit critical fields quickly. Select a row for detailed controls.</p>
                   </div>
-                  <div className={`rounded-md border px-2 py-1 text-xs ${issuesCount ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                  <div className={`border px-2 py-1 text-xs ${issuesCount ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
                     Issues: {issuesCount}
                   </div>
                 </div>
@@ -435,7 +442,7 @@ export function QuotingEngineScreen() {
                     onChange={(e) => setSearch(e.target.value)}
                   />
                   <button
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    className="border border-slate-300 bg-white px-2 py-1.5 text-xs"
                     onClick={() => {
                       const nextLine = (workspace.lineItems.at(-1)?.lineNumber || 0) + 1;
                       const next: LineItem = {
@@ -457,7 +464,7 @@ export function QuotingEngineScreen() {
                     Add row
                   </button>
                   <button
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    className="border border-slate-300 bg-white px-2 py-1.5 text-xs"
                     onClick={() => {
                       if (!selectedLine) return;
                       const duplicate = { ...selectedLine, id: crypto.randomUUID(), lineNumber: workspace.lineItems.length + 1 };
@@ -468,7 +475,7 @@ export function QuotingEngineScreen() {
                     Duplicate row
                   </button>
                   <button
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    className="border border-slate-300 bg-white px-2 py-1.5 text-xs"
                     onClick={() => {
                       if (!selectedLine) return;
                       setWorkspace((prev) =>
@@ -482,7 +489,7 @@ export function QuotingEngineScreen() {
                   </button>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-200">
+                <div className="overflow-x-auto border-y border-slate-200">
                   <table className="min-w-[1120px] w-full text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
@@ -577,44 +584,44 @@ export function QuotingEngineScreen() {
                 <div className="mb-2 text-sm font-semibold">C. Pricing & Terms</div>
                 <p className="mb-3 text-xs text-slate-500">Capture assumptions explicitly to reduce back-and-forth with buyers.</p>
                 <div className="mb-3 grid gap-2 md:grid-cols-3 lg:grid-cols-6">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                  <div className="border border-slate-200 p-2 text-xs">
                     <div className="text-slate-500">Subtotal</div>
                     <div className="text-sm font-semibold">{money(subtotal)}</div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                  <div className="border border-slate-200 p-2 text-xs">
                     <div className="text-slate-500">Freight</div>
                     <div className="text-sm font-semibold">{money(workspace.pricingTerms.freight)}</div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                  <div className="border border-slate-200 p-2 text-xs">
                     <div className="text-slate-500">Tax</div>
                     <div className="text-sm font-semibold">{money(workspace.pricingTerms.tax)}</div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                  <div className="border border-slate-200 p-2 text-xs">
                     <div className="text-slate-500">FX</div>
                     <div className="text-sm font-semibold">{workspace.pricingTerms.fx.toFixed(3)}</div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                  <div className="border border-slate-200 p-2 text-xs">
                     <div className="text-slate-500">Margin</div>
                     <div className="text-sm font-semibold">{workspace.pricingTerms.marginPercent}%</div>
                   </div>
-                  <div className="rounded-lg border border-slate-900 bg-slate-900 p-2 text-xs text-white">
+                  <div className="border border-slate-900 bg-slate-900 p-2 text-xs text-white">
                     <div className="text-slate-300">Total</div>
                     <div className="text-sm font-semibold">{money(total)}</div>
                   </div>
                 </div>
 
                 <div className="grid gap-2 md:grid-cols-3">
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs" placeholder="Freight" type="number" value={workspace.pricingTerms.freight} onChange={(e) => updateTerms({ freight: Number(e.target.value || 0) })} />
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs" placeholder="Tax" type="number" value={workspace.pricingTerms.tax} onChange={(e) => updateTerms({ tax: Number(e.target.value || 0) })} />
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs" placeholder="Margin %" type="number" value={workspace.pricingTerms.marginPercent} onChange={(e) => updateTerms({ marginPercent: Number(e.target.value || 0) })} />
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs" placeholder="Currency" value={workspace.pricingTerms.currency} onChange={(e) => updateTerms({ currency: e.target.value })} />
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs" placeholder="Payment terms" value={workspace.pricingTerms.paymentTerms} onChange={(e) => updateTerms({ paymentTerms: e.target.value })} />
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs" placeholder="Lead time" value={workspace.pricingTerms.leadTime} onChange={(e) => updateTerms({ leadTime: e.target.value })} />
-                  <input className="rounded-md border border-slate-300 px-2 py-2 text-xs md:col-span-3" placeholder="Incoterms (optional)" value={workspace.pricingTerms.incoterms} onChange={(e) => updateTerms({ incoterms: e.target.value })} />
-                  <textarea className="min-h-20 rounded-md border border-slate-300 px-2 py-2 text-xs md:col-span-3" placeholder="Assumptions (recommended)" value={workspace.pricingTerms.assumptions} onChange={(e) => updateTerms({ assumptions: e.target.value })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs" placeholder="Freight" type="number" value={workspace.pricingTerms.freight} onChange={(e) => updateTerms({ freight: Number(e.target.value || 0) })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs" placeholder="Tax" type="number" value={workspace.pricingTerms.tax} onChange={(e) => updateTerms({ tax: Number(e.target.value || 0) })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs" placeholder="Margin %" type="number" value={workspace.pricingTerms.marginPercent} onChange={(e) => updateTerms({ marginPercent: Number(e.target.value || 0) })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs" placeholder="Currency" value={workspace.pricingTerms.currency} onChange={(e) => updateTerms({ currency: e.target.value })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs" placeholder="Payment terms" value={workspace.pricingTerms.paymentTerms} onChange={(e) => updateTerms({ paymentTerms: e.target.value })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs" placeholder="Lead time" value={workspace.pricingTerms.leadTime} onChange={(e) => updateTerms({ leadTime: e.target.value })} />
+                  <input className="border border-slate-300 px-2 py-2 text-xs md:col-span-3" placeholder="Incoterms (optional)" value={workspace.pricingTerms.incoterms} onChange={(e) => updateTerms({ incoterms: e.target.value })} />
+                  <textarea className="min-h-20 border border-slate-300 px-2 py-2 text-xs md:col-span-3" placeholder="Assumptions (recommended)" value={workspace.pricingTerms.assumptions} onChange={(e) => updateTerms({ assumptions: e.target.value })} />
                 </div>
 
-                <div className="mt-3 border border-slate-200 p-3 text-xs">
+                <div className="mt-3 border-t border-slate-200 pt-3 text-xs">
                   <div className="mb-1 font-medium text-slate-700">Price Compared to Last Quote</div>
                   {lastComparison ? (
                     <div className="grid gap-2 md:grid-cols-3">
@@ -642,10 +649,10 @@ export function QuotingEngineScreen() {
         </section>
 
         {!workspaceLoading && workspace && selectedLine && (
-          <aside className="fixed inset-y-0 right-0 z-30 w-full border-l border-slate-200 bg-white p-4 shadow-xl lg:static lg:h-fit lg:w-[360px] lg:rounded-xl lg:border">
+          <aside className="fixed inset-y-0 right-0 z-30 w-full border-l border-slate-200 bg-white p-4 shadow-xl lg:static lg:h-fit lg:w-[360px] lg:border">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-sm font-semibold">D. Line Item Drawer</div>
-              <button className="rounded-md border border-slate-300 px-2 py-1 text-xs lg:hidden" onClick={() => setSelectedLineId("")}>Close</button>
+              <button className="border border-slate-300 px-2 py-1 text-xs lg:hidden" onClick={() => setSelectedLineId("")}>Close</button>
             </div>
             <p className="mb-3 text-xs text-slate-500">Adjust detailed values here; keep table edits quick and minimal.</p>
 
@@ -664,7 +671,7 @@ export function QuotingEngineScreen() {
               </label>
             </div>
 
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
               <div className="mb-1 font-medium text-slate-700">Inventory Match (read-only)</div>
               {!drawerMatch ? (
                 <div className="text-slate-500">Loading inventory match...</div>
@@ -686,11 +693,11 @@ export function QuotingEngineScreen() {
               <input className="w-full rounded border border-slate-300 px-2 py-1.5" placeholder="Coating / Finish" value={selectedLine.finish ?? ""} onChange={(e) => updateLine(selectedLine.id, { finish: e.target.value })} />
             </div>
 
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
               <div className="mb-1 font-medium text-slate-700">Risk Flags (read-only)</div>
               <div className="flex flex-wrap gap-1.5">
                 {drawerRisks.map((risk) => (
-                  <span key={`${risk.type}-${risk.label}`} className={`rounded-full border px-2 py-0.5 ${riskChip(risk.level)}`}>
+                <span key={`${risk.type}-${risk.label}`} className={`border px-2 py-0.5 ${riskChip(risk.level)}`}>
                     {risk.label}
                   </span>
                 ))}
@@ -699,7 +706,7 @@ export function QuotingEngineScreen() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               <button
-                className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                className="border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
                 onClick={() => {
                   if (!drawerMatch) return;
                   updateLine(selectedLine.id, {
@@ -713,7 +720,7 @@ export function QuotingEngineScreen() {
               >
                 Apply suggested values
               </button>
-              <button className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs" onClick={() => addToast("Marked as needs clarification.")}>
+              <button className="border border-slate-300 bg-white px-2.5 py-1.5 text-xs" onClick={() => addToast("Marked as needs clarification.")}>
                 Mark as needs clarification
               </button>
             </div>
@@ -721,7 +728,7 @@ export function QuotingEngineScreen() {
         )}
 
         {!workspaceLoading && workspace && !selectedLine && (
-          <aside className="hidden rounded-xl border border-dashed border-slate-300 bg-white p-4 text-xs text-slate-600 lg:block">
+          <aside className="hidden border border-dashed border-slate-300 bg-white p-4 text-xs text-slate-600 lg:block">
             <div className="mb-1 text-sm font-semibold text-slate-800">Line Item Drawer</div>
             <p>Select a line item to view inventory match, risks, and advanced cost fields.</p>
           </aside>
