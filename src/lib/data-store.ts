@@ -26,6 +26,42 @@ let pool: Pool | null = null;
 let dbReady = false;
 let fileMutex: Promise<void> = Promise.resolve();
 
+const isTrue = (value: string | undefined, fallback: boolean) => {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+};
+
+const isCertChainError = (error: unknown) => {
+  const message = String((error as { message?: string })?.message || "").toLowerCase();
+  return message.includes("self-signed certificate") || message.includes("certificate chain");
+};
+
+const mapDbError = (error: unknown) => {
+  if (!isCertChainError(error)) return error;
+  return new Error(
+    "Database TLS validation failed (self-signed certificate). Set DATABASE_SSL_ALLOW_SELF_SIGNED=true and DATABASE_SSL_REJECT_UNAUTHORIZED=false in your environment variables."
+  );
+};
+
+const resolveDbSsl = (): boolean | { rejectUnauthorized: boolean } | undefined => {
+  const sslRaw = process.env.DATABASE_SSL?.trim().toLowerCase();
+  if (sslRaw === "false") return false;
+
+  const allowSelfSigned = isTrue(process.env.DATABASE_SSL_ALLOW_SELF_SIGNED, false);
+  const hasRejectUnauthorizedOverride = typeof process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "string";
+  const sslExplicitlyEnabled = sslRaw === "true";
+
+  if (!sslExplicitlyEnabled && !allowSelfSigned && !hasRejectUnauthorizedOverride) {
+    // Preserve pg default behavior when SSL is not explicitly configured.
+    return undefined;
+  }
+
+  const rejectUnauthorized = allowSelfSigned
+    ? false
+    : isTrue(process.env.DATABASE_SSL_REJECT_UNAUTHORIZED, true);
+  return { rejectUnauthorized };
+};
+
 const defaultManufacturers: AppData["manufacturers"] = [
   {
     id: "m1",
@@ -178,9 +214,10 @@ const withDbReadRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
 const getPool = () => {
   if (!dbUrl) throw new Error("No database URL found (DATABASE_URL/POSTGRES_URL/POSTGRES_PRISMA_URL/SUPABASE_DATABASE_URL)");
   if (!pool) {
+    const ssl = resolveDbSsl();
     pool = new Pool({
       connectionString: dbUrl,
-      ssl: process.env.DATABASE_SSL === "false" ? false : undefined,
+      ssl,
       max: Number(process.env.DB_POOL_MAX || 5),
       connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 5000),
       idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
@@ -267,14 +304,22 @@ const withFileLock = async <T>(fn: () => Promise<T>) => {
 
 export const readData = async (): Promise<AppData> => {
   if (usingDatabase()) {
-    return withDbReadRetry(readFromDb);
+    try {
+      return await withDbReadRetry(readFromDb);
+    } catch (error) {
+      throw mapDbError(error);
+    }
   }
   return readFromFile();
 };
 
 export const writeData = async (data: AppData) => {
   if (usingDatabase()) {
-    await writeToDb(data);
+    try {
+      await writeToDb(data);
+    } catch (error) {
+      throw mapDbError(error);
+    }
     return;
   }
   await writeToFile(data);
@@ -282,30 +327,34 @@ export const writeData = async (data: AppData) => {
 
 export const mutateData = async <T>(mutator: (data: AppData) => Promise<T> | T): Promise<T> => {
   if (usingDatabase()) {
-    await ensureDb();
-    const p = getPool();
-    const client = await p.connect();
     try {
-      await client.query("BEGIN");
-      await client.query("select pg_advisory_xact_lock(hashtext($1))", [appStateKey]);
-      await client.query(
-        "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do nothing",
-        [appStateKey, JSON.stringify(normalizeData(defaultData))]
-      );
-      const current = await client.query("select payload from app_state where id = $1 for update", [appStateKey]);
-      const data = normalizeData((current.rows[0]?.payload as AppData) ?? defaultData);
-      const result = await mutator(data);
-      await client.query(
-        "update app_state set payload = $2::jsonb, updated_at = now() where id = $1",
-        [appStateKey, JSON.stringify(normalizeData(data))]
-      );
-      await client.query("COMMIT");
-      return result;
+      await ensureDb();
+      const p = getPool();
+      const client = await p.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("select pg_advisory_xact_lock(hashtext($1))", [appStateKey]);
+        await client.query(
+          "insert into app_state (id, payload, updated_at) values ($1, $2::jsonb, now()) on conflict (id) do nothing",
+          [appStateKey, JSON.stringify(normalizeData(defaultData))]
+        );
+        const current = await client.query("select payload from app_state where id = $1 for update", [appStateKey]);
+        const data = normalizeData((current.rows[0]?.payload as AppData) ?? defaultData);
+        const result = await mutator(data);
+        await client.query(
+          "update app_state set payload = $2::jsonb, updated_at = now() where id = $1",
+          [appStateKey, JSON.stringify(normalizeData(data))]
+        );
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
+      throw mapDbError(error);
     }
   }
 
