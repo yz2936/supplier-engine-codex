@@ -100,9 +100,9 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
 
   const load = useCallback(async () => {
     const [invRes, manRes, reqRes] = await Promise.all([
-      fetch("/api/inventory", { cache: "no-store" }),
-      fetch("/api/manufacturers", { cache: "no-store" }),
-      fetch("/api/sourcing", { cache: "no-store" })
+      fetch("/api/inventory", { credentials: "include", cache: "no-store" }),
+      fetch("/api/manufacturers", { credentials: "include", cache: "no-store" }),
+      fetch("/api/sourcing", { credentials: "include", cache: "no-store" })
     ]);
     const [invJson, manJson, reqJson] = await Promise.all([invRes.json(), manRes.json(), reqRes.json()]);
 
@@ -211,6 +211,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     try {
       const primary = selected[0];
       const res = await fetch("/api/sourcing", {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -231,7 +232,11 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
         })
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to create sourcing request");
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("Session expired. Please log in again.");
+        if (res.status === 403) throw new Error("Your account role is not allowed to create sourcing requests.");
+        throw new Error(json.error || "Failed to create sourcing request");
+      }
       setStatus("Sourcing request created.");
       setSelectedKeys({});
       setNotes("");
@@ -280,6 +285,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     setStatus("Sending sourcing email...");
     try {
       const res = await fetch(`/api/sourcing/${encodeURIComponent(emailingRequestId)}/email`, {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -315,6 +321,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     setStatus("Adding supplier to network...");
     try {
       const res = await fetch("/api/manufacturers", {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -351,6 +358,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     setStatus("Updating preferred supplier...");
     try {
       const res = await fetch(`/api/manufacturers/${encodeURIComponent(id)}`, {
+        credentials: "include",
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preferred: true })
@@ -370,7 +378,8 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     setNetworkBusy(true);
     setStatus("Removing supplier...");
     try {
-      const res = await fetch(`/api/manufacturers/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/manufacturers/${encodeURIComponent(id)}`, {
+        credentials: "include", method: "DELETE" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to remove supplier");
       setStatus("Supplier removed from network.");
