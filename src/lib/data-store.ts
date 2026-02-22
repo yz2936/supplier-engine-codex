@@ -19,7 +19,6 @@ const resolveDbUrl = () =>
   || process.env.SUPABASE_DATABASE_URL?.trim()
   || "";
 
-const dbUrl = resolveDbUrl();
 const appStateKey = process.env.APP_STATE_KEY?.trim() || "main";
 
 let pool: Pool | null = null;
@@ -37,6 +36,38 @@ const isTrue = (value: string | undefined, fallback: boolean) => {
   return ["1", "true", "yes", "on"].includes(normalized);
 };
 
+const shouldUseNoVerifySslMode = () => {
+  const allowSelfSigned = isTrue(process.env.DATABASE_SSL_ALLOW_SELF_SIGNED, false);
+  const rejectUnauthorized = isTrue(process.env.DATABASE_SSL_REJECT_UNAUTHORIZED, true);
+  return allowSelfSigned || !rejectUnauthorized;
+};
+
+const sanitizeDbUrlForTls = (url: string) => {
+  if (!url || !shouldUseNoVerifySslMode()) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") return url;
+    parsed.searchParams.set("sslmode", "no-verify");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+};
+
+const dbUrl = sanitizeDbUrlForTls(resolveDbUrl());
+
+const dbConnectionInfo = (() => {
+  try {
+    const parsed = new URL(dbUrl);
+    return {
+      host: parsed.host || "(unknown-host)",
+      sslMode: parsed.searchParams.get("sslmode") || "(unset)"
+    };
+  } catch {
+    return { host: "(invalid-db-url)", sslMode: "(unknown)" };
+  }
+})();
+
 const isCertChainError = (error: unknown) => {
   const message = String((error as { message?: string })?.message || "").toLowerCase();
   return message.includes("self-signed certificate") || message.includes("certificate chain");
@@ -48,12 +79,12 @@ const mapDbError = (error: unknown) => {
   const rejectUnauthorized = normalizeBoolValue(process.env.DATABASE_SSL_REJECT_UNAUTHORIZED) || "(unset)";
   return new Error(
     "Database TLS validation failed (self-signed certificate). Set DATABASE_SSL_ALLOW_SELF_SIGNED=true and DATABASE_SSL_REJECT_UNAUTHORIZED=false in your environment variables. "
-      + `Runtime values: DATABASE_SSL_ALLOW_SELF_SIGNED=${allowSelfSigned}, DATABASE_SSL_REJECT_UNAUTHORIZED=${rejectUnauthorized}.`
+      + `Runtime values: DATABASE_SSL_ALLOW_SELF_SIGNED=${allowSelfSigned}, DATABASE_SSL_REJECT_UNAUTHORIZED=${rejectUnauthorized}, db_host=${dbConnectionInfo.host}, sslmode=${dbConnectionInfo.sslMode}.`
   );
 };
 
 const resolveDbSsl = (): boolean | { rejectUnauthorized: boolean } | undefined => {
-  const sslRaw = process.env.DATABASE_SSL?.trim().toLowerCase();
+  const sslRaw = normalizeBoolValue(process.env.DATABASE_SSL);
   if (sslRaw === "false") return false;
 
   const allowSelfSigned = isTrue(process.env.DATABASE_SSL_ALLOW_SELF_SIGNED, false);
