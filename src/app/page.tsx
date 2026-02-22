@@ -527,27 +527,30 @@ export default function HomePage() {
   }
 
   return (
-    <main className="app-shell mx-auto min-h-screen max-w-[1700px] p-4 md:p-6">
-      <div className={`grid grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] ${chatOpen ? "xl:grid-cols-[250px_minmax(0,1fr)_400px]" : ""}`}>
-        <aside className="panel panel-aurora h-fit space-y-3 lg:sticky lg:top-4">
+    <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-6">
+      <div className={`grid grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)] ${chatOpen ? "xl:grid-cols-[270px_minmax(0,1fr)_390px]" : ""}`}>
+        <aside className="panel panel-aurora h-fit space-y-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
           <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <h1 className="text-xl font-bold text-steel-900">Stainless Logic</h1>
-              <p className="text-xs text-steel-600">{user.companyName}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
+              <div className="space-y-0.5">
+                <h1 className="font-['Sora'] text-xl font-semibold text-steel-900">Stainless Logic</h1>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-steel-500">Procurement OS</p>
+              </div>
             </div>
             <button className="btn-secondary px-2 py-1 text-xs lg:hidden" onClick={() => setMobileNavOpen((v) => !v)}>
               {mobileNavOpen ? "Close" : "Menu"}
             </button>
           </div>
-          <div className="rounded-xl border border-steel-200 bg-steel-50 p-3 text-sm">
+          <div className="rounded-2xl border border-steel-200/80 bg-white/82 p-3 text-sm">
             <div className="font-semibold text-steel-900">{user.name}</div>
             <div className="hidden text-steel-700 sm:block">{user.email}</div>
-            <div className="mt-2 inline-block rounded-full bg-teal-700 px-2 py-1 text-xs text-white">{roleLabel(user.role)}</div>
+            <div className="mt-2 inline-flex rounded-full bg-[#0b1a48] px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
+            <div className="mt-2 text-xs text-steel-500">{user.companyName}</div>
           </div>
 
           <nav className={`space-y-1.5 ${mobileNavOpen ? "block" : "hidden"} lg:block`}>
             <div className="section-title">Navigation</div>
-            <div className="neo-chip">⚡ Command Center</div>
             {([
               "dashboard",
               "workspace",
@@ -562,8 +565,8 @@ export default function HomePage() {
                 onClick={() => setActiveView(v)}
                 className={
                   activeView === v
-                    ? "flex w-full items-center justify-between rounded-lg border border-teal-700 bg-teal-700 px-2.5 py-2 text-left text-sm font-medium text-white"
-                    : "flex w-full items-center justify-between rounded-lg border border-steel-200 bg-white px-2.5 py-2 text-left text-sm text-steel-800 hover:bg-steel-50"
+                    ? "flex w-full items-center justify-between rounded-xl border border-[#0b1a48] bg-[#0b1a48] px-3 py-2.5 text-left text-sm font-medium text-white shadow-[0_8px_18px_rgba(8,16,42,0.35)]"
+                    : "flex w-full items-center justify-between rounded-xl border border-steel-200 bg-white/88 px-3 py-2.5 text-left text-sm text-steel-800 transition hover:border-orange-300 hover:bg-white"
                 }
               >
                 <div className="flex min-w-0 items-center gap-2">
@@ -572,13 +575,13 @@ export default function HomePage() {
                   </span>
                   <span className="truncate">{viewMeta[v].label}</span>
                 </div>
-                {activeView === v && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                {activeView === v && <span className="h-2 w-2 rounded-full bg-orange-400" />}
               </button>
             ))}
           </nav>
 
           <button
-            className="btn-secondary w-full"
+            className="btn-secondary w-full lg:mt-auto"
             onClick={async () => {
               await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
               setUser(null);
@@ -593,36 +596,48 @@ export default function HomePage() {
         <section className="min-w-0 space-y-4">
           <header className="panel panel-aurora flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
-              <div className="section-title">Intelligent Supplier OS</div>
-              <h2 className="text-2xl font-semibold text-steel-900">{viewMeta[activeView].label}</h2>
+              <div className="section-title">Platform Overview</div>
+              <h2 className="font-['Sora'] text-2xl font-semibold text-steel-900">{viewMeta[activeView].label}</h2>
               <p className="text-sm text-steel-700">{viewMeta[activeView].hint}</p>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-sm md:min-w-[240px]">
-              <div className="kpi-card">
-                <div className="text-xs text-steel-600">Inventory Rows</div>
-                <div className="text-lg font-semibold">{inventoryCount}</div>
+            <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[500px]">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="kpi-card">
+                  <div className="text-xs text-steel-600">Inventory Rows</div>
+                  <div className="text-lg font-semibold">{inventoryCount}</div>
+                </div>
+                <div className="kpi-card">
+                  <div className="text-xs text-steel-600">Access</div>
+                  <div className="text-lg font-semibold">{roleLabel(role)}</div>
+                </div>
               </div>
-              <div className="kpi-card">
-                <div className="text-xs text-steel-600">Access</div>
-                <div className="text-lg font-semibold">{roleLabel(role)}</div>
-              </div>
-            </div>
-            <div className="w-full rounded-xl border border-steel-200 bg-steel-50 p-2 text-xs md:max-w-[280px]">
-              <div className="mb-1 font-medium text-steel-700">AI Route</div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-steel-200/80 bg-white/75 p-2 text-xs">
+                <span className="text-steel-700">Model Route</span>
                 <button
                   className={llmProvider === "openai" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
                   onClick={() => setLlmProvider("openai")}
                   title="Global model route: OpenAI"
                 >
-                  🌐 OpenAI
+                  OpenAI
                 </button>
                 <button
                   className={llmProvider === "deepseek" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
                   onClick={() => setLlmProvider("deepseek")}
                   title="Global model route: DeepSeek"
                 >
-                  🇨🇳 DeepSeek
+                  DeepSeek
+                </button>
+                <button
+                  className="btn-secondary ml-auto px-2.5 py-1 text-xs"
+                  onClick={() => {
+                    setActiveView("workspace");
+                    setRfqText("");
+                    setLines([]);
+                    setTotal(0);
+                    setError("");
+                  }}
+                >
+                  + New RFQ
                 </button>
               </div>
             </div>
@@ -847,7 +862,7 @@ export default function HomePage() {
         )}
       </div>
       <button
-        className="fixed bottom-4 right-4 z-40 rounded-full bg-gradient-to-r from-teal-600 via-cyan-600 to-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(8,145,178,0.35)] hover:from-teal-700 hover:via-cyan-700 hover:to-teal-800"
+        className="fixed bottom-4 right-4 z-40 rounded-full bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(242,104,9,0.4)] transition hover:-translate-y-0.5 hover:from-orange-600 hover:to-orange-700"
         onClick={() => setChatOpen((v) => !v)}
       >
         {chatOpen ? "Hide Copilot" : "Show Copilot"}
