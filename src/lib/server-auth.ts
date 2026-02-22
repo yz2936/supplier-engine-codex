@@ -104,17 +104,7 @@ export const getAuthenticatedUser = async (req: Request): Promise<AppUser | null
   const user = data.users.find((u) => u.id === state.id || u.email === state.email);
   if (user) return user;
 
-  return {
-    id: state.id,
-    name: state.name,
-    email: state.email,
-    role: state.role,
-    companyId: state.companyId,
-    companyName: state.companyName,
-    onboarded: state.onboarded,
-    createdAt: state.createdAt,
-    passwordHash: ""
-  };
+  return null;
 };
 
 export const requireUser = async (req: Request) => {
