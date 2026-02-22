@@ -25,7 +25,7 @@ import {
 
 type Toast = { id: string; message: string };
 
-const sectionClass = "rounded-xl border border-slate-200 bg-white p-4";
+const sectionClass = "border-b border-slate-200 pb-5";
 
 const emptyFilters: QueueFilters = { customer: "", dueDate: "", status: "all" };
 
@@ -362,36 +362,29 @@ export function QuotingEngineScreen() {
           )}
 
           {!workspaceLoading && !workspace && (
-            <div className={`${sectionClass} text-sm text-slate-600`}>
+            <div className="border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
               Select an RFQ from the queue to start quoting.
             </div>
           )}
 
           {!workspaceLoading && workspace && (
             <>
-              <div className={`${sectionClass} flex flex-wrap items-center justify-between gap-3`}>
-                <div>
-                  <div className="text-sm font-semibold">Quote Workspace</div>
-                  <div className="text-xs text-slate-500">Keep edits compact and explicit. Required fields are highlighted.</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
-                  <div className="mb-1 font-medium text-slate-700">Checklist</div>
-                  <div className="grid grid-cols-2 gap-1 md:grid-cols-4">
-                    {[
-                      { label: "Parse complete", ok: checklist.parseComplete },
-                      { label: "Required fields filled", ok: checklist.requiredFilled },
-                      { label: "Terms reviewed", ok: checklist.termsReviewed },
-                      { label: "Ready to send", ok: checklist.readyToSend }
-                    ].map((step) => (
-                      <div
-                        key={step.label}
-                        className={`rounded border px-2 py-1 ${step.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"}`}
-                      >
-                        {step.ok ? "✓" : "•"} {step.label}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 text-xs">
+                {[
+                  { label: "Parse complete", ok: checklist.parseComplete },
+                  { label: "Required fields filled", ok: checklist.requiredFilled },
+                  { label: "Terms reviewed", ok: checklist.termsReviewed },
+                  { label: "Ready to send", ok: checklist.readyToSend }
+                ].map((step) => (
+                  <span
+                    key={step.label}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${
+                      step.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"
+                    }`}
+                  >
+                    {step.ok ? "✓" : "•"} {step.label}
+                  </span>
+                ))}
               </div>
 
               <section className={sectionClass}>
@@ -405,18 +398,18 @@ export function QuotingEngineScreen() {
                   <div><span className="text-slate-500">Project</span><div className="font-medium">{workspace.projectName || "-"}</div></div>
                 </div>
                 <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div className="border border-slate-200 p-3 text-xs">
                     <div className="mb-1 font-medium text-slate-700">Source Files</div>
                     <div className="space-y-1">
                       {workspace.sourceFiles.map((f) => (
-                        <div key={f.id} className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1">
+                        <div key={f.id} className="flex items-center justify-between border border-slate-200 px-2 py-1">
                           <span>{f.name}</span>
                           <button className="text-slate-700 underline">View</button>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div className="border border-slate-200 p-3 text-xs">
                     <div className="mb-1 font-medium text-slate-700">Key Notes</div>
                     <p className="leading-5 text-slate-700">{workspace.keyNotes || "No key notes available."}</p>
                   </div>
@@ -489,7 +482,7 @@ export function QuotingEngineScreen() {
                   </button>
                 </div>
 
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <div className="overflow-x-auto border border-slate-200">
                   <table className="min-w-[1120px] w-full text-xs">
                     <thead className="bg-slate-50 text-slate-600">
                       <tr>
@@ -621,7 +614,7 @@ export function QuotingEngineScreen() {
                   <textarea className="min-h-20 rounded-md border border-slate-300 px-2 py-2 text-xs md:col-span-3" placeholder="Assumptions (recommended)" value={workspace.pricingTerms.assumptions} onChange={(e) => updateTerms({ assumptions: e.target.value })} />
                 </div>
 
-                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                <div className="mt-3 border border-slate-200 p-3 text-xs">
                   <div className="mb-1 font-medium text-slate-700">Price Compared to Last Quote</div>
                   {lastComparison ? (
                     <div className="grid gap-2 md:grid-cols-3">
