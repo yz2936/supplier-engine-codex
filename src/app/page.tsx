@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIChatPanel } from "@/components/AIChatPanel";
 import { BuyerInbox } from "@/components/BuyerInbox";
 import { DashboardOverview } from "@/components/DashboardOverview";
+import { EmailIntegrationSettings } from "@/components/EmailIntegrationSettings";
 import { InventoryCatalogManager } from "@/components/InventoryCatalogManager";
 import { InventoryUploader } from "@/components/InventoryUploader";
 import { QuoteHistory } from "@/components/QuoteHistory";
@@ -835,12 +836,15 @@ export default function HomePage() {
           )}
 
           {activeView === "settings" && (
-            <div className="panel panel-aurora space-y-2 text-sm">
-              <div><span className="font-medium">Name:</span> {user.name}</div>
-              <div><span className="font-medium">Email:</span> {user.email}</div>
-              <div><span className="font-medium">Company:</span> {user.companyName}</div>
-              <div><span className="font-medium">Role:</span> {roleLabel(user.role)}</div>
-              <div className="text-steel-600">Role determines allowed actions for pricing, inventory updates, and quote visibility.</div>
+            <div className="space-y-4">
+              <div className="panel panel-aurora space-y-2 text-sm">
+                <div><span className="font-medium">Name:</span> {user.name}</div>
+                <div><span className="font-medium">Email:</span> {user.email}</div>
+                <div><span className="font-medium">Company:</span> {user.companyName}</div>
+                <div><span className="font-medium">Role:</span> {roleLabel(user.role)}</div>
+                <div className="text-steel-600">Role determines allowed actions for pricing, inventory updates, and quote visibility.</div>
+              </div>
+              <EmailIntegrationSettings />
             </div>
           )}
         </section>

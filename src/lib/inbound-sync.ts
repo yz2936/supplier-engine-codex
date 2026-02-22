@@ -3,6 +3,7 @@ import { simpleParser } from "mailparser";
 import { AppData, AppUser } from "@/lib/types";
 import { extractEmailAddress, findManagerForInbound, upsertBuyerProfile } from "@/lib/buyer-routing";
 import { filterInboundEmail } from "@/lib/inbound-filter";
+import { getImapConfigForUser } from "@/lib/user-email-config";
 
 type SyncResult = {
   scanned: number;
@@ -10,40 +11,7 @@ type SyncResult = {
   skipped: number;
 };
 
-const inferImapHostFromSmtp = (smtpHost?: string) => {
-  const host = (smtpHost || "").trim().toLowerCase();
-  if (!host) return "";
-  if (host.includes("gmail.com")) return "imap.gmail.com";
-  if (host.includes("office365.com") || host.includes("outlook.com") || host.includes("hotmail.com") || host.includes("live.com")) {
-    return "outlook.office365.com";
-  }
-  if (host.startsWith("smtp.")) return host.replace(/^smtp\./, "imap.");
-  return "";
-};
-
-const isTrue = (value: string | undefined, fallback: boolean) => {
-  if (typeof value !== "string" || !value.trim()) return fallback;
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-};
-
 const isCertChainError = (message: string) => /self[-\s]signed certificate|certificate chain/i.test(message);
-
-const inboxConfig = () => {
-  const user = process.env.IMAP_USER?.trim() || process.env.SMTP_USER?.trim() || "";
-  const pass = (process.env.IMAP_PASS || process.env.SMTP_PASS || "").replace(/\s+/g, "");
-  const inferredHost = inferImapHostFromSmtp(process.env.SMTP_HOST?.trim());
-  const allowSelfSigned = isTrue(process.env.IMAP_ALLOW_SELF_SIGNED, false);
-  const rejectUnauthorized = allowSelfSigned ? false : isTrue(process.env.IMAP_TLS_REJECT_UNAUTHORIZED, true);
-
-  return {
-    host: process.env.IMAP_HOST?.trim() || inferredHost || "imap.gmail.com",
-    port: Number(process.env.IMAP_PORT || 993),
-    secure: String(process.env.IMAP_SECURE || "true").toLowerCase() === "true",
-    rejectUnauthorized,
-    user,
-    pass
-  };
-};
 
 const textFromParsed = (parsed: Awaited<ReturnType<typeof simpleParser>>) => {
   const text = parsed.text?.trim();
@@ -81,12 +49,21 @@ const addressText = (value: unknown): string => {
   return "";
 };
 
-const createClient = (cfg: ReturnType<typeof inboxConfig>, rejectUnauthorized: boolean) => {
+const createClient = (
+  cfg: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: { user: string; pass: string };
+    rejectUnauthorized: boolean;
+  },
+  rejectUnauthorized: boolean
+) => {
   return new ImapFlow({
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
-    auth: { user: cfg.user, pass: cfg.pass },
+    auth: { user: cfg.auth.user, pass: cfg.auth.pass },
     tls: { rejectUnauthorized },
     logger: false
   });
@@ -96,14 +73,20 @@ const syncWithClient = async (
   client: ImapFlow,
   data: AppData,
   fallbackManager: AppUser,
-  cfg: ReturnType<typeof inboxConfig>,
+  cfg: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: { user: string; pass: string };
+    rejectUnauthorized: boolean;
+  },
   limit: number,
   forceCurrentManager: boolean
 ): Promise<SyncResult> => {
   let scanned = 0;
   let created = 0;
   let skipped = 0;
-  const inboxAddress = extractEmailAddress(process.env.INBOUND_ROUTE_ADDRESS?.trim() || cfg.user);
+  const inboxAddress = extractEmailAddress(process.env.INBOUND_ROUTE_ADDRESS?.trim() || cfg.auth.user);
 
   await client.connect();
   await client.mailboxOpen("INBOX");
@@ -127,11 +110,11 @@ const syncWithClient = async (
 
     const parsed = await simpleParser(message.source as Buffer);
     const from = addressText(parsed.from).trim();
-    const to = addressText(parsed.to).trim() || cfg.user;
+    const to = addressText(parsed.to).trim() || cfg.auth.user;
     const subject = (parsed.subject || message.envelope?.subject || "Buyer Reply").trim();
     const bodyText = textFromParsed(parsed);
     const fromEmail = extractEmailAddress(from);
-    const toEmail = extractEmailAddress(to || cfg.user);
+    const toEmail = extractEmailAddress(to || cfg.auth.user);
     const sourceMessageId = (parsed.messageId || "").trim() || `uid-${uid}`;
     const receivedAtSource = parsed.date || message.internalDate || new Date();
     const receivedAt = receivedAtSource instanceof Date
@@ -147,7 +130,7 @@ const syncWithClient = async (
       skipped += 1;
       continue;
     }
-    if (fromEmail === inboxAddress || fromEmail === extractEmailAddress(cfg.user)) {
+    if (fromEmail === inboxAddress || fromEmail === extractEmailAddress(cfg.auth.user)) {
       skipped += 1;
       continue;
     }
@@ -186,10 +169,10 @@ export const syncInboundMailboxForManager = async (
   limit = 25,
   forceCurrentManager = true
 ): Promise<SyncResult> => {
-  const cfg = inboxConfig();
-  if (!cfg.user || !cfg.pass) {
+  const cfg = getImapConfigForUser(data, fallbackManager.id);
+  if (!cfg?.auth?.user || !cfg?.auth?.pass) {
     throw new Error(
-      "Inbound mailbox is not configured. In Vercel set IMAP_USER + IMAP_PASS (or reuse SMTP_USER + SMTP_PASS), plus IMAP_HOST/IMAP_PORT/IMAP_SECURE as needed."
+      "Inbound mailbox is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account."
     );
   }
 

@@ -1,22 +1,11 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
-import { mutateData } from "@/lib/data-store";
+import { mutateData, readData } from "@/lib/data-store";
 import { draftQuoteHtml, draftQuoteText, QuoteDraftMeta } from "@/lib/format";
 import { upsertBuyerProfile } from "@/lib/buyer-routing";
 import { requireRole } from "@/lib/server-auth";
 import { QuoteLine } from "@/lib/types";
-
-const smtpConfig = () => ({
-  host: process.env.SMTP_HOST?.trim(),
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-  auth: process.env.SMTP_USER && process.env.SMTP_PASS
-    ? {
-      user: process.env.SMTP_USER.trim(),
-      pass: process.env.SMTP_PASS.replace(/\s+/g, "")
-    }
-    : undefined
-});
+import { getSmtpConfigForUser } from "@/lib/user-email-config";
 
 export async function POST(req: Request) {
   try {
@@ -37,10 +26,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No quote lines to send" }, { status: 400 });
     }
 
-    const cfg = smtpConfig();
-    if (!cfg.host) {
+    const data = await readData();
+    const cfg = getSmtpConfigForUser(data, auth.user.id);
+    if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
       return NextResponse.json({
-        error: "SMTP is not configured. In Vercel set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM under Project Settings -> Environment Variables (or use .env.local for local dev)."
+        error: "Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account."
       }, { status: 400 });
     }
 
@@ -50,7 +40,7 @@ export async function POST(req: Request) {
     const subject = baseSubject.includes(managerTag) ? baseSubject : `${baseSubject} ${managerTag}`;
     const text = draftQuoteText(customerName, lines, total, meta);
     const html = draftQuoteHtml(customerName, lines, total, meta);
-    const fromAddress = process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || "";
+    const fromAddress = cfg.from || auth.user.email;
 
     await transporter.sendMail({
       from: fromAddress,

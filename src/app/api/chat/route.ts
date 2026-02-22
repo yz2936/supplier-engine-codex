@@ -4,6 +4,7 @@ import { mutateData, readData } from "@/lib/data-store";
 import { createLlmClient, normalizeProvider } from "@/lib/llm-provider";
 import { requireUser } from "@/lib/server-auth";
 import { Manufacturer } from "@/lib/types";
+import { getSmtpConfigForUser } from "@/lib/user-email-config";
 
 type ChatAction =
   | { type: "set_margin"; value: number }
@@ -23,18 +24,6 @@ type ChatContext = {
 };
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-
-const smtpConfig = () => ({
-  host: process.env.SMTP_HOST?.trim(),
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-  auth: process.env.SMTP_USER && process.env.SMTP_PASS
-    ? {
-      user: process.env.SMTP_USER.trim(),
-      pass: process.env.SMTP_PASS.replace(/\s+/g, "")
-    }
-    : undefined
-});
 
 const suggestMargin = (context: ChatContext, message: string) => {
   const source = `${message}\n${context.rfqText ?? ""}`.toLowerCase();
@@ -351,19 +340,20 @@ const addSupplierFromMessage = async (message: string, role: string) => {
   return `Supplier added: ${added.name} (${added.email}).`;
 };
 
-const sendSupplierEmailFromMessage = async (message: string, fromUserEmail: string) => {
+const sendSupplierEmailFromMessage = async (message: string, userId: string, fromUserEmail: string) => {
   const parsed = parseSupplierEmailIntent(message);
   if (!parsed) {
     return "To send a supplier email, include recipient and optional subject/body. Example: Email supplier to: rfq@vendor.com subject: Pipe RFQ body: Please quote...";
   }
 
-  const cfg = smtpConfig();
-  if (!cfg.host) {
-    return "SMTP is not configured. Set SMTP_HOST/SMTP_PORT/SMTP_SECURE/SMTP_USER/SMTP_PASS/SMTP_FROM in environment variables.";
+  const data = await readData();
+  const cfg = getSmtpConfigForUser(data, userId);
+  if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
+    return "Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account.";
   }
 
   const transporter = nodemailer.createTransport(cfg);
-  const fromAddress = process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || "";
+  const fromAddress = cfg.from || fromUserEmail;
   await transporter.sendMail({
     from: fromAddress,
     to: parsed.to,
@@ -438,7 +428,7 @@ export async function POST(req: Request) {
 
   if (wantsSupplierEmail) {
     try {
-      operationalNotes.push(await sendSupplierEmailFromMessage(message, auth.user.email));
+      operationalNotes.push(await sendSupplierEmailFromMessage(message, auth.user.id, auth.user.email));
     } catch (error) {
       operationalNotes.push(error instanceof Error ? `Supplier email failed: ${error.message}` : "Supplier email failed.");
     }

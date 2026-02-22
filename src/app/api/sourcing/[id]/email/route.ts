@@ -2,18 +2,7 @@ import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
-
-const smtpConfig = () => ({
-  host: process.env.SMTP_HOST?.trim(),
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-  auth: process.env.SMTP_USER && process.env.SMTP_PASS
-    ? {
-      user: process.env.SMTP_USER.trim(),
-      pass: process.env.SMTP_PASS.replace(/\s+/g, "")
-    }
-    : undefined
-});
+import { getSmtpConfigForUser } from "@/lib/user-email-config";
 
 const escapeHtml = (value: string) =>
   value
@@ -68,14 +57,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const overrideSubject = String(body.subject ?? "").trim();
     const overrideMessage = String(body.message ?? "").trim();
 
-    const cfg = smtpConfig();
-    if (!cfg.host) {
+    const data = await readData();
+    const cfg = getSmtpConfigForUser(data, auth.user.id);
+    if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
       return NextResponse.json({
-        error: "SMTP is not configured. In Vercel set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM under Project Settings -> Environment Variables (or use .env.local for local dev)."
+        error: "Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account."
       }, { status: 400 });
     }
 
-    const data = await readData();
     const request = data.sourcingRequests.find((r) => r.id === id);
     if (!request) return NextResponse.json({ error: "Sourcing request not found" }, { status: 404 });
 
@@ -93,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .join("");
 
     const transporter = nodemailer.createTransport(cfg);
-    const fromAddress = process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || "";
+    const fromAddress = cfg.from || auth.user.email;
     await transporter.sendMail({
       from: fromAddress,
       to: recipient,

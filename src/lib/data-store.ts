@@ -193,7 +193,8 @@ const normalizeData = (raw: AppData): AppData => {
       companyId: user.companyId,
       companyName: (user as { companyName?: string }).companyName ?? "Stainless Logic Demo",
       onboarded: (user as { onboarded?: boolean }).onboarded ?? true,
-      createdAt: (user as { createdAt?: string }).createdAt ?? new Date().toISOString()
+      createdAt: (user as { createdAt?: string }).createdAt ?? new Date().toISOString(),
+      emailSettings: (user as { emailSettings?: AppData["users"][number]["emailSettings"] }).emailSettings
     };
   });
 

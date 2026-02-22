@@ -158,6 +158,7 @@ export type AppUser = {
   companyName: string;
   onboarded: boolean;
   createdAt: string;
+  emailSettings?: UserEmailSettings;
 };
 
 export type Session = {
@@ -165,4 +166,28 @@ export type Session = {
   userId: string;
   expiresAt: string;
   createdAt: string;
+};
+
+export type UserEmailSmtpSettings = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  passEncrypted: string;
+  from?: string;
+};
+
+export type UserEmailImapSettings = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  passEncrypted: string;
+  rejectUnauthorized?: boolean;
+};
+
+export type UserEmailSettings = {
+  smtp?: UserEmailSmtpSettings;
+  imap?: UserEmailImapSettings;
+  updatedAt: string;
 };
