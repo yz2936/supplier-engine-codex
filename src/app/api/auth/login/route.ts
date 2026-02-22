@@ -53,7 +53,12 @@ export async function POST(req: Request) {
     });
     setSessionCookie(res, token, expiresAt, user);
     return res;
-  } catch {
-    return NextResponse.json({ error: "Auth service temporarily unavailable. Please retry." }, { status: 503 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Auth service temporarily unavailable. Please retry.";
+    const isKnown = message.toLowerCase().includes("database tls validation failed")
+      || message.toLowerCase().includes("self-signed certificate")
+      || message.toLowerCase().includes("timeout")
+      || message.toLowerCase().includes("temporarily unavailable");
+    return NextResponse.json({ error: isKnown ? message : "Auth service temporarily unavailable. Please retry." }, { status: 503 });
   }
 }

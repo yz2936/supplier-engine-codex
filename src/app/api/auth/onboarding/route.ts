@@ -60,7 +60,12 @@ export async function POST(req: Request) {
     const res = NextResponse.json({ ok: true, user: result.user });
     setSessionCookie(res, token, expiresAt, result.sessionUser as AppUser);
     return res;
-  } catch {
-    return NextResponse.json({ error: "Onboarding service temporarily unavailable. Please retry." }, { status: 503 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Onboarding service temporarily unavailable. Please retry.";
+    const isKnown = message.toLowerCase().includes("database tls validation failed")
+      || message.toLowerCase().includes("self-signed certificate")
+      || message.toLowerCase().includes("timeout")
+      || message.toLowerCase().includes("temporarily unavailable");
+    return NextResponse.json({ error: isKnown ? message : "Onboarding service temporarily unavailable. Please retry." }, { status: 503 });
   }
 }
