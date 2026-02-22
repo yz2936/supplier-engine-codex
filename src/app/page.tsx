@@ -406,13 +406,13 @@ export default function HomePage() {
   }, []);
 
   if (loadingUser) {
-    return <main className="mx-auto min-h-screen max-w-7xl p-6"><div className="panel">Loading workspace...</div></main>;
+    return <main className="mx-auto min-h-screen max-w-7xl p-6"><div className="border border-steel-200/80 bg-white/85 p-4">Loading workspace...</div></main>;
   }
 
   if (!user) {
     return (
       <main className="mx-auto min-h-screen max-w-md p-6">
-        <div className="panel panel-aurora space-y-4">
+        <div className="space-y-4 border border-steel-200/80 bg-white/85 p-4">
           <div>
             <h1 className="text-2xl font-bold text-steel-800">Stainless Logic</h1>
             <p className="text-sm text-steel-700">Sign in to access your quoting workspace.</p>
@@ -485,7 +485,7 @@ export default function HomePage() {
   if (!user.onboarded) {
     return (
       <main className="mx-auto min-h-screen max-w-xl p-6">
-        <div className="panel panel-aurora space-y-4">
+        <div className="space-y-4 border border-steel-200/80 bg-white/85 p-4">
           <h1 className="text-2xl font-bold">Onboarding</h1>
           <p className="text-sm text-steel-700">Set your profile so the workspace matches your role and permissions.</p>
           <input className="input" value={onboardingName} onChange={(e) => setOnboardingName(e.target.value)} placeholder="Your full name" />
@@ -676,14 +676,14 @@ export default function HomePage() {
           {activeView === "workspace" && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
-              <section className="panel panel-aurora space-y-3">
+              <section className="space-y-3 border border-steel-200/80 bg-white/85 p-4">
                 <div>
                   <div className="section-title">Step 1</div>
                   <div className="font-semibold">RFQ Input Workspace</div>
                 </div>
                 <input className="input" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
                 <textarea className="input min-h-[260px] font-mono text-xs md:min-h-[320px]" value={rfqText} onChange={(e) => setRfqText(e.target.value)} />
-                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-steel-200 bg-steel-50 p-2">
+                <div className="flex flex-wrap items-center gap-2 border-y border-steel-200 py-2">
                   <button className="btn" onClick={parseAndPrice} disabled={!canGenerateQuotes(role) || busy}>{busy ? "Parsing..." : "Parse + Match + Price"}</button>
                   <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
                     {autoParse ? "Auto-Parse: ON" : "Auto-Parse: OFF"}
@@ -722,7 +722,7 @@ export default function HomePage() {
                 </div>
 
                 {error && <p className="text-sm text-rose-600">{error}</p>}
-                <div className="space-y-2 rounded-xl border border-steel-200 bg-steel-50 p-3">
+                <div className="space-y-2 border-t border-steel-200 pt-3">
                   <div>
                     <div className="section-title">Step 3</div>
                     <div className="font-medium text-sm">Quote Draft + Email Setup</div>
@@ -779,7 +779,7 @@ export default function HomePage() {
                   </div>
                   {sendStatus && <p className="text-xs text-steel-700">{sendStatus}</p>}
                 </div>
-                <div className="rounded-xl border border-steel-200 bg-steel-50 p-3">
+                <div className="border-t border-steel-200 pt-3">
                   <div className="mb-2 section-title">Draft Preview</div>
                   <div className="text-xs whitespace-pre-wrap">{draft}</div>
                 </div>
@@ -787,7 +787,7 @@ export default function HomePage() {
 
               <section className="space-y-4">
                 <ResultsTable lines={lines} />
-                <div className="panel panel-aurora flex items-center justify-between">
+                <div className="flex items-center justify-between border border-steel-200/80 bg-white/85 p-4">
                   <div>
                     <div className="section-title">Step 2</div>
                     <div className="text-lg font-semibold">Quote Total</div>
@@ -804,7 +804,7 @@ export default function HomePage() {
               <div className="grid grid-cols-1 gap-4">
                 {canUploadInventory(role)
                   ? <InventoryUploader onUploaded={loadInventoryCount} />
-                  : <div className="panel panel-aurora text-sm text-steel-700">Only Inventory Managers and Sales Managers can upload inventory snapshots.</div>}
+                  : <div className="border border-steel-200/80 bg-white/85 p-4 text-sm text-steel-700">Only Inventory Managers and Sales Managers can upload inventory snapshots.</div>}
               </div>
               <InventoryCatalogManager
                 editable={canUploadInventory(role)}
@@ -828,18 +828,18 @@ export default function HomePage() {
           {activeView === "quotes" && (
             canGenerateQuotes(role)
               ? <QuoteHistory enabled />
-              : <div className="panel panel-aurora text-sm text-steel-700">Your role cannot access quote generation/history.</div>
+              : <div className="border border-steel-200/80 bg-white/85 p-4 text-sm text-steel-700">Your role cannot access quote generation/history.</div>
           )}
 
           {activeView === "buyers" && (
             role === "sales_manager"
               ? <BuyerInbox onStartQuote={startQuoteFromBuyerMessage} />
-              : <div className="panel panel-aurora text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
+              : <div className="border border-steel-200/80 bg-white/85 p-4 text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
           )}
 
           {activeView === "settings" && (
             <div className="space-y-4">
-              <div className="panel panel-aurora space-y-2 text-sm">
+              <div className="space-y-2 border border-steel-200/80 bg-white/85 p-4 text-sm">
                 <div><span className="font-medium">Name:</span> {user.name}</div>
                 <div><span className="font-medium">Email:</span> {user.email}</div>
                 <div><span className="font-medium">Company:</span> {user.companyName}</div>
