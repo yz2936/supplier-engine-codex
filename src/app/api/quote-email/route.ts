@@ -6,6 +6,7 @@ import { upsertBuyerProfile } from "@/lib/buyer-routing";
 import { requireRole } from "@/lib/server-auth";
 import { QuoteLine } from "@/lib/types";
 import { getSmtpConfigForUser } from "@/lib/user-email-config";
+import { buildQuotePdf } from "@/lib/quote-pdf";
 
 export async function POST(req: Request) {
   try {
@@ -41,6 +42,9 @@ export async function POST(req: Request) {
     const text = draftQuoteText(customerName, lines, total, meta);
     const html = draftQuoteHtml(customerName, lines, total, meta);
     const fromAddress = cfg.from || auth.user.email;
+    const quotePdf = buildQuotePdf({ customerName, lines, total, meta });
+    const safeCustomer = customerName.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "quote";
+    const pdfFileName = `Quotation_${safeCustomer}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
     await transporter.sendMail({
       from: fromAddress,
@@ -48,7 +52,14 @@ export async function POST(req: Request) {
       subject,
       text,
       html,
-      replyTo: auth.user.email
+      replyTo: auth.user.email,
+      attachments: [
+        {
+          filename: pdfFileName,
+          content: quotePdf,
+          contentType: "application/pdf"
+        }
+      ]
     });
 
     await mutateData((data) => {
@@ -76,7 +87,7 @@ export async function POST(req: Request) {
       return null;
     });
 
-    return NextResponse.json({ ok: true, message: `Quote email sent to ${buyerEmail}` });
+    return NextResponse.json({ ok: true, message: `Quote email sent to ${buyerEmail} with PDF attachment` });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to send quote email";
     const isAuthError = /535|badcredentials|auth/i.test(message);
