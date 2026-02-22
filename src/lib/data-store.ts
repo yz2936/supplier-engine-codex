@@ -12,7 +12,14 @@ const resolveDataPath = () => {
 };
 
 const dataPath = resolveDataPath();
-const dbUrl = process.env.DATABASE_URL?.trim();
+const resolveDbUrl = () =>
+  process.env.DATABASE_URL?.trim()
+  || process.env.POSTGRES_URL?.trim()
+  || process.env.POSTGRES_PRISMA_URL?.trim()
+  || process.env.SUPABASE_DATABASE_URL?.trim()
+  || "";
+
+const dbUrl = resolveDbUrl();
 const appStateKey = process.env.APP_STATE_KEY?.trim() || "main";
 
 let pool: Pool | null = null;
@@ -169,7 +176,7 @@ const withDbReadRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
 };
 
 const getPool = () => {
-  if (!dbUrl) throw new Error("DATABASE_URL is missing");
+  if (!dbUrl) throw new Error("No database URL found (DATABASE_URL/POSTGRES_URL/POSTGRES_PRISMA_URL/SUPABASE_DATABASE_URL)");
   if (!pool) {
     pool = new Pool({
       connectionString: dbUrl,

@@ -5,13 +5,14 @@ import { hashPassword, normalizeEmail } from "@/lib/security";
 import { UserRole } from "@/lib/types";
 
 const validRoles: UserRole[] = ["sales_rep", "inventory_manager", "sales_manager"];
-const missingPersistentDb = () => Boolean(process.env.VERCEL && !process.env.DATABASE_URL?.trim());
+const hasDb = () => Boolean(process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim() || process.env.POSTGRES_PRISMA_URL?.trim() || process.env.SUPABASE_DATABASE_URL?.trim());
+const missingPersistentDb = () => Boolean(process.env.VERCEL && !hasDb());
 
 export async function POST(req: Request) {
   try {
     if (missingPersistentDb()) {
       return NextResponse.json({
-        error: "Persistent storage is not configured. Set DATABASE_URL in Vercel environment variables."
+        error: "Persistent storage is not configured. Set one of DATABASE_URL, POSTGRES_URL, POSTGRES_PRISMA_URL, or SUPABASE_DATABASE_URL in Vercel environment variables."
       }, { status: 503 });
     }
 
