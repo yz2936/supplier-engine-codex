@@ -530,16 +530,16 @@ export default function HomePage() {
 
   const layoutClass = chatOpen
     ? (sidebarCollapsed
-      ? "grid grid-cols-1 gap-5 lg:grid-cols-[92px_minmax(0,1fr)] xl:grid-cols-[92px_minmax(0,1fr)_390px]"
-      : "grid grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_390px]")
+      ? "grid grid-cols-1 gap-4 lg:grid-cols-[92px_minmax(0,1fr)] xl:grid-cols-[92px_minmax(0,1fr)_390px]"
+      : "grid grid-cols-1 gap-4 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_390px]")
     : (sidebarCollapsed
-      ? "grid grid-cols-1 gap-5 lg:grid-cols-[92px_minmax(0,1fr)]"
-      : "grid grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)]");
+      ? "grid grid-cols-1 gap-4 lg:grid-cols-[92px_minmax(0,1fr)]"
+      : "grid grid-cols-1 gap-4 lg:grid-cols-[270px_minmax(0,1fr)]");
 
   return (
-    <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-6">
+    <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-5">
       <div className={layoutClass}>
-        <aside className="panel panel-aurora h-fit space-y-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
+        <aside className="h-fit space-y-3 border border-steel-200/80 bg-white/85 p-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
@@ -564,7 +564,7 @@ export default function HomePage() {
             </div>
           </div>
           {!sidebarCollapsed && (
-            <div className="rounded-2xl border border-steel-200/80 bg-white/82 p-3 text-sm">
+            <div className="border border-steel-200/80 bg-white/82 p-2.5 text-sm">
               <div className="font-semibold text-steel-900">{user.name}</div>
               <div className="hidden text-steel-700 sm:block">{user.email}</div>
               <div className="mt-2 inline-flex rounded-full bg-[#0b1a48] px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
@@ -619,24 +619,25 @@ export default function HomePage() {
         </aside>
 
         <section className="min-w-0 space-y-4">
-          <header className="panel panel-aurora flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <header className="border border-steel-200/80 bg-white/80 p-4 md:p-5">
+            <div className="grid gap-4 md:grid-cols-[1.3fr_1fr] md:items-start">
             <div className="space-y-1">
               <div className="section-title">Overview</div>
               <h2 className="font-['Sora'] text-2xl font-semibold text-steel-900">{viewMeta[activeView].label}</h2>
               <p className="text-xs text-steel-600">{viewMeta[activeView].hint}</p>
             </div>
-            <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[420px]">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="kpi-card">
+            <div className="w-full space-y-2 md:min-w-[420px]">
+              <div className="grid grid-cols-2 gap-3 border-b border-steel-200 pb-2 text-xs">
+                <div>
                   <div className="text-[11px] text-steel-600">Inventory Rows</div>
                   <div className="text-lg font-semibold">{inventoryCount}</div>
                 </div>
-                <div className="kpi-card">
+                <div>
                   <div className="text-[11px] text-steel-600">Access</div>
                   <div className="text-lg font-semibold">{roleLabel(role)}</div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-steel-200/80 bg-white/75 p-2 text-[11px]">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
                 <button
                   className={llmProvider === "openai" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
                   onClick={() => setLlmProvider("openai")}
@@ -664,6 +665,7 @@ export default function HomePage() {
                   + New RFQ
                 </button>
               </div>
+            </div>
             </div>
           </header>
 
