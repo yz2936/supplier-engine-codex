@@ -539,7 +539,7 @@ export default function HomePage() {
   return (
     <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-5">
       <div className={layoutClass}>
-        <aside className="h-fit space-y-3 border border-steel-200/80 bg-white/85 p-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
+        <aside className="h-fit space-y-3 border-r border-steel-200/80 pr-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
@@ -564,7 +564,7 @@ export default function HomePage() {
             </div>
           </div>
           {!sidebarCollapsed && (
-            <div className="border border-steel-200/80 bg-white/82 p-2.5 text-sm">
+            <div className="border-b border-steel-200/80 pb-2.5 text-sm">
               <div className="font-semibold text-steel-900">{user.name}</div>
               <div className="hidden text-steel-700 sm:block">{user.email}</div>
               <div className="mt-2 inline-flex rounded-full bg-[#0b1a48] px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
@@ -588,8 +588,8 @@ export default function HomePage() {
                 onClick={() => setActiveView(v)}
                 className={
                   activeView === v
-                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} rounded-xl border border-[#0b1a48] bg-[#0b1a48] px-3 py-2.5 text-left text-sm font-medium text-white shadow-[0_8px_18px_rgba(8,16,42,0.35)]`
-                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} rounded-xl border border-steel-200 bg-white/88 px-3 py-2.5 text-left text-sm text-steel-800 transition hover:border-orange-300 hover:bg-white`
+                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-[#0b1a48] bg-white/50 px-3 py-2 text-left text-sm font-medium text-steel-900`
+                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-transparent px-3 py-2 text-left text-sm text-steel-800 transition hover:border-orange-300 hover:bg-white/40`
                 }
                 title={sidebarCollapsed ? viewMeta[v].label : undefined}
               >
@@ -599,7 +599,7 @@ export default function HomePage() {
                   </span>
                   {!sidebarCollapsed && <span className="truncate">{viewMeta[v].label}</span>}
                 </div>
-                {activeView === v && !sidebarCollapsed && <span className="h-2 w-2 rounded-full bg-orange-400" />}
+                {activeView === v && !sidebarCollapsed && <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />}
               </button>
             ))}
           </nav>
@@ -619,7 +619,7 @@ export default function HomePage() {
         </aside>
 
         <section className="min-w-0 space-y-4">
-          <header className="border border-steel-200/80 bg-white/80 p-4 md:p-5">
+          <header className="border-b border-steel-200/80 pb-3">
             <div className="grid gap-4 md:grid-cols-[1.3fr_1fr] md:items-start">
             <div className="space-y-1">
               <div className="section-title">Overview</div>
@@ -676,7 +676,7 @@ export default function HomePage() {
           {activeView === "workspace" && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4">
-              <section className="space-y-3 border border-steel-200/80 bg-white/85 p-4">
+              <section className="space-y-3 py-1">
                 <div>
                   <div className="section-title">Step 1</div>
                   <div className="font-semibold">RFQ Input Workspace</div>
@@ -787,7 +787,7 @@ export default function HomePage() {
 
               <section className="space-y-4">
                 <ResultsTable lines={lines} />
-                <div className="flex items-center justify-between border border-steel-200/80 bg-white/85 p-4">
+                <div className="flex items-center justify-between border-t border-steel-200 py-3">
                   <div>
                     <div className="section-title">Step 2</div>
                     <div className="text-lg font-semibold">Quote Total</div>
@@ -804,7 +804,7 @@ export default function HomePage() {
               <div className="grid grid-cols-1 gap-4">
                 {canUploadInventory(role)
                   ? <InventoryUploader onUploaded={loadInventoryCount} />
-                  : <div className="border border-steel-200/80 bg-white/85 p-4 text-sm text-steel-700">Only Inventory Managers and Sales Managers can upload inventory snapshots.</div>}
+                  : <div className="border-t border-steel-200 py-3 text-sm text-steel-700">Only Inventory Managers and Sales Managers can upload inventory snapshots.</div>}
               </div>
               <InventoryCatalogManager
                 editable={canUploadInventory(role)}
@@ -828,18 +828,18 @@ export default function HomePage() {
           {activeView === "quotes" && (
             canGenerateQuotes(role)
               ? <QuoteHistory enabled />
-              : <div className="border border-steel-200/80 bg-white/85 p-4 text-sm text-steel-700">Your role cannot access quote generation/history.</div>
+              : <div className="border-t border-steel-200 py-3 text-sm text-steel-700">Your role cannot access quote generation/history.</div>
           )}
 
           {activeView === "buyers" && (
             role === "sales_manager"
               ? <BuyerInbox onStartQuote={startQuoteFromBuyerMessage} />
-              : <div className="border border-steel-200/80 bg-white/85 p-4 text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
+              : <div className="border-t border-steel-200 py-3 text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
           )}
 
           {activeView === "settings" && (
             <div className="space-y-4">
-              <div className="space-y-2 border border-steel-200/80 bg-white/85 p-4 text-sm">
+              <div className="space-y-2 border-t border-steel-200 py-3 text-sm">
                 <div><span className="font-medium">Name:</span> {user.name}</div>
                 <div><span className="font-medium">Email:</span> {user.email}</div>
                 <div><span className="font-medium">Company:</span> {user.companyName}</div>
