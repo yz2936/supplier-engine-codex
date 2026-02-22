@@ -2,6 +2,21 @@
 
 import { useState } from "react";
 
+type UploadResponse = {
+  count?: number;
+  error?: string;
+};
+
+const readJsonSafe = async (res: Response): Promise<UploadResponse> => {
+  const raw = await res.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as UploadResponse;
+  } catch {
+    return { error: raw || "Unexpected server response" };
+  }
+};
+
 export function InventoryUploader({ onUploaded }: { onUploaded: () => void }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string>("");
@@ -14,9 +29,10 @@ export function InventoryUploader({ onUploaded }: { onUploaded: () => void }) {
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/inventory/upload", { credentials: "include", method: "POST", body: form });
-      const json = await res.json();
+      const json = await readJsonSafe(res);
       if (!res.ok) throw new Error(json.error || "Upload failed");
-      setMessage(`Uploaded ${json.count} inventory rows`);
+      const count = typeof json.count === "number" ? json.count : 0;
+      setMessage(`Uploaded ${count} inventory rows`);
       onUploaded();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Upload failed");

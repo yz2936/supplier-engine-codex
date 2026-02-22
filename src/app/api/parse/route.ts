@@ -7,27 +7,32 @@ import { requireRole } from "@/lib/server-auth";
 import { normalizeProvider } from "@/lib/llm-provider";
 
 export async function POST(req: Request) {
-  const auth = await requireRole(req, ["sales_rep", "sales_manager"]);
-  if (!auth.ok) return auth.response;
+  try {
+    const auth = await requireRole(req, ["sales_rep", "sales_manager"]);
+    if (!auth.ok) return auth.response;
 
-  const body = await req.json();
-  const text = String(body.text ?? "");
-  const marginPercent = Number(body.marginPercent ?? 12);
-  const llmProvider = normalizeProvider(body.llmProvider);
+    const body = await req.json().catch(() => ({} as { text?: string; marginPercent?: number; llmProvider?: string }));
+    const text = String(body.text ?? "");
+    const marginPercent = Number(body.marginPercent ?? 12);
+    const llmProvider = normalizeProvider(body.llmProvider);
 
-  if (!text.trim()) {
-    return NextResponse.json({ error: "RFQ text is required" }, { status: 400 });
+    if (!text.trim()) {
+      return NextResponse.json({ error: "RFQ text is required" }, { status: 400 });
+    }
+
+    const data = await readData();
+    const extracted = await parseRFQ(text, llmProvider);
+    const matches = findBestMatches(extracted, data.inventory);
+    const quoteLines = buildQuoteLines(matches, data.surcharges, marginPercent);
+
+    return NextResponse.json({
+      extracted,
+      matches,
+      quoteLines,
+      total: quoteTotal(quoteLines)
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Parse failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const data = await readData();
-  const extracted = await parseRFQ(text, llmProvider);
-  const matches = findBestMatches(extracted, data.inventory);
-  const quoteLines = buildQuoteLines(matches, data.surcharges, marginPercent);
-
-  return NextResponse.json({
-    extracted,
-    matches,
-    quoteLines,
-    total: quoteTotal(quoteLines)
-  });
 }

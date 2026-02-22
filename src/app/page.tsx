@@ -263,7 +263,13 @@ export default function HomePage() {
         body: JSON.stringify({ text, marginPercent: margin, llmProvider }),
         signal: controller.signal
       });
-      const json = await res.json();
+      const raw = await res.text();
+      let json: { error?: string; quoteLines?: QuoteLine[]; total?: number } = {};
+      try {
+        json = raw ? JSON.parse(raw) : {};
+      } catch {
+        json = { error: raw || "Unexpected server response" };
+      }
       if (!res.ok) {
         if (res.status === 401) {
           throw new Error("Session expired. Please log in again.");
@@ -273,7 +279,7 @@ export default function HomePage() {
       // Ignore stale responses from older parse requests.
       if (requestId !== parseRequestIdRef.current) return null;
       const nextLines = json.quoteLines || [];
-      const nextTotal = json.total || 0;
+      const nextTotal = typeof json.total === "number" ? json.total : 0;
       setLines(nextLines);
       setTotal(nextTotal);
       return { lines: nextLines, total: nextTotal };
@@ -310,10 +316,17 @@ export default function HomePage() {
     const form = new FormData();
     form.append("file", file);
     const res = await fetch("/api/inventory/upload", { credentials: "include", method: "POST", body: form });
-    const json = await res.json();
+    const raw = await res.text();
+    let json: { error?: string; count?: number } = {};
+    try {
+      json = raw ? JSON.parse(raw) : {};
+    } catch {
+      json = { error: raw || "Unexpected server response" };
+    }
     if (!res.ok) throw new Error(json.error || "Upload failed");
     await loadInventoryCount();
-    return `Uploaded ${json.count} inventory rows from ${file.name}.`;
+    const count = typeof json.count === "number" ? json.count : 0;
+    return `Uploaded ${count} inventory rows from ${file.name}.`;
   }, [loadInventoryCount]);
 
   const refreshInventoryWorkspace = useCallback(async () => {
