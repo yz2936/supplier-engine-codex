@@ -82,6 +82,7 @@ export default function HomePage() {
   const [sendStatus, setSendStatus] = useState("");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const parseAbortRef = useRef<AbortController | null>(null);
   const parseRequestIdRef = useRef(0);
@@ -526,31 +527,52 @@ export default function HomePage() {
     );
   }
 
+  const layoutClass = chatOpen
+    ? (sidebarCollapsed
+      ? "grid grid-cols-1 gap-5 lg:grid-cols-[92px_minmax(0,1fr)] xl:grid-cols-[92px_minmax(0,1fr)_390px]"
+      : "grid grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_390px]")
+    : (sidebarCollapsed
+      ? "grid grid-cols-1 gap-5 lg:grid-cols-[92px_minmax(0,1fr)]"
+      : "grid grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)]");
+
   return (
     <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-6">
-      <div className={`grid grid-cols-1 gap-5 lg:grid-cols-[270px_minmax(0,1fr)] ${chatOpen ? "xl:grid-cols-[270px_minmax(0,1fr)_390px]" : ""}`}>
+      <div className={layoutClass}>
         <aside className="panel panel-aurora h-fit space-y-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
-              <div className="space-y-0.5">
+              <div className={`space-y-0.5 ${sidebarCollapsed ? "hidden lg:hidden" : ""}`}>
                 <h1 className="font-['Sora'] text-xl font-semibold text-steel-900">Stainless Logic</h1>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-steel-500">Procurement OS</p>
               </div>
             </div>
-            <button className="btn-secondary px-2 py-1 text-xs lg:hidden" onClick={() => setMobileNavOpen((v) => !v)}>
-              {mobileNavOpen ? "Close" : "Menu"}
-            </button>
+            <div className="flex items-center gap-1">
+              <button className="btn-secondary px-2 py-1 text-xs lg:hidden" onClick={() => setMobileNavOpen((v) => !v)}>
+                {mobileNavOpen ? "Close" : "Menu"}
+              </button>
+              <button
+                className="btn-secondary hidden h-8 w-8 items-center justify-center px-0 py-0 lg:inline-flex"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                <svg viewBox="0 0 20 20" className={`h-4 w-4 transition ${sidebarCollapsed ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12.5 4.5 7 10l5.5 5.5" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="rounded-2xl border border-steel-200/80 bg-white/82 p-3 text-sm">
-            <div className="font-semibold text-steel-900">{user.name}</div>
-            <div className="hidden text-steel-700 sm:block">{user.email}</div>
-            <div className="mt-2 inline-flex rounded-full bg-[#0b1a48] px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
-            <div className="mt-2 text-xs text-steel-500">{user.companyName}</div>
-          </div>
+          {!sidebarCollapsed && (
+            <div className="rounded-2xl border border-steel-200/80 bg-white/82 p-3 text-sm">
+              <div className="font-semibold text-steel-900">{user.name}</div>
+              <div className="hidden text-steel-700 sm:block">{user.email}</div>
+              <div className="mt-2 inline-flex rounded-full bg-[#0b1a48] px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
+              <div className="mt-2 text-xs text-steel-500">{user.companyName}</div>
+            </div>
+          )}
 
           <nav className={`space-y-1.5 ${mobileNavOpen ? "block" : "hidden"} lg:block`}>
-            <div className="section-title">Navigation</div>
+            {!sidebarCollapsed && <div className="section-title">Navigation</div>}
             {([
               "dashboard",
               "workspace",
@@ -565,17 +587,18 @@ export default function HomePage() {
                 onClick={() => setActiveView(v)}
                 className={
                   activeView === v
-                    ? "flex w-full items-center justify-between rounded-xl border border-[#0b1a48] bg-[#0b1a48] px-3 py-2.5 text-left text-sm font-medium text-white shadow-[0_8px_18px_rgba(8,16,42,0.35)]"
-                    : "flex w-full items-center justify-between rounded-xl border border-steel-200 bg-white/88 px-3 py-2.5 text-left text-sm text-steel-800 transition hover:border-orange-300 hover:bg-white"
+                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} rounded-xl border border-[#0b1a48] bg-[#0b1a48] px-3 py-2.5 text-left text-sm font-medium text-white shadow-[0_8px_18px_rgba(8,16,42,0.35)]`
+                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} rounded-xl border border-steel-200 bg-white/88 px-3 py-2.5 text-left text-sm text-steel-800 transition hover:border-orange-300 hover:bg-white`
                 }
+                title={sidebarCollapsed ? viewMeta[v].label : undefined}
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={activeView === v ? "text-white" : "text-steel-600"}>
                     {renderNavIcon(v)}
                   </span>
-                  <span className="truncate">{viewMeta[v].label}</span>
+                  {!sidebarCollapsed && <span className="truncate">{viewMeta[v].label}</span>}
                 </div>
-                {activeView === v && <span className="h-2 w-2 rounded-full bg-orange-400" />}
+                {activeView === v && !sidebarCollapsed && <span className="h-2 w-2 rounded-full bg-orange-400" />}
               </button>
             ))}
           </nav>
@@ -588,31 +611,31 @@ export default function HomePage() {
               setLines([]);
               setTotal(0);
             }}
+            title={sidebarCollapsed ? "Logout" : undefined}
           >
-            Logout
+            {sidebarCollapsed ? "⎋" : "Logout"}
           </button>
         </aside>
 
         <section className="min-w-0 space-y-4">
           <header className="panel panel-aurora flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
-              <div className="section-title">Platform Overview</div>
+              <div className="section-title">Overview</div>
               <h2 className="font-['Sora'] text-2xl font-semibold text-steel-900">{viewMeta[activeView].label}</h2>
-              <p className="text-sm text-steel-700">{viewMeta[activeView].hint}</p>
+              <p className="text-xs text-steel-600">{viewMeta[activeView].hint}</p>
             </div>
-            <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[500px]">
-              <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[420px]">
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="kpi-card">
-                  <div className="text-xs text-steel-600">Inventory Rows</div>
+                  <div className="text-[11px] text-steel-600">Inventory Rows</div>
                   <div className="text-lg font-semibold">{inventoryCount}</div>
                 </div>
                 <div className="kpi-card">
-                  <div className="text-xs text-steel-600">Access</div>
+                  <div className="text-[11px] text-steel-600">Access</div>
                   <div className="text-lg font-semibold">{roleLabel(role)}</div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-steel-200/80 bg-white/75 p-2 text-xs">
-                <span className="text-steel-700">Model Route</span>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-steel-200/80 bg-white/75 p-2 text-[11px]">
                 <button
                   className={llmProvider === "openai" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
                   onClick={() => setLlmProvider("openai")}
@@ -649,15 +672,6 @@ export default function HomePage() {
 
           {activeView === "workspace" && (
             <div className="space-y-4">
-              <div className="panel">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="step-badge">Step 1: Input RFQ</span>
-                  <span className="text-steel-400">→</span>
-                  <span className="step-badge">Step 2: Parse + Price</span>
-                  <span className="text-steel-400">→</span>
-                  <span className="step-badge">Step 3: Draft + Send</span>
-                </div>
-              </div>
               <div className="grid grid-cols-1 gap-4">
               <section className="panel panel-aurora space-y-3">
                 <div>
