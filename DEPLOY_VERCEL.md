@@ -63,6 +63,7 @@ Set these in Vercel Environment Variables so logins and history persist across d
 
 - `DATABASE_URL`
 - `APP_STATE_KEY` (optional, default `main`)
+- `SESSION_SECRET` (required; long random string for signed auth cookie fallback)
 - `DATABASE_SSL` (optional, leave unset in Vercel)
 
 When `DATABASE_URL` is set, the app automatically stores all app state in Postgres and no longer relies on ephemeral `/tmp` storage.

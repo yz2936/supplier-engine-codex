@@ -9,7 +9,7 @@ const toNum = (v: unknown, fallback: number) => {
 };
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ sku: string }> }) {
-  const auth = await requireRole(req, ["inventory_manager", "sales_manager"]);
+  const auth = await requireRole(req, ["sales_rep", "inventory_manager", "sales_manager"]);
   if (!auth.ok) return auth.response;
 
   const { sku } = await params;

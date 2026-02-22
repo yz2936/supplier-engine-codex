@@ -4,7 +4,7 @@ import { parseInventoryFile } from "@/lib/inventory-file";
 import { requireRole } from "@/lib/server-auth";
 
 export async function POST(req: Request) {
-  const auth = await requireRole(req, ["inventory_manager", "sales_manager"]);
+  const auth = await requireRole(req, ["sales_rep", "inventory_manager", "sales_manager"]);
   if (!auth.ok) return auth.response;
 
   const form = await req.formData();

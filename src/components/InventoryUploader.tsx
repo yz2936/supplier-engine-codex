@@ -13,7 +13,7 @@ export function InventoryUploader({ onUploaded }: { onUploaded: () => void }) {
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/inventory/upload", { method: "POST", body: form });
+      const res = await fetch("/api/inventory/upload", { credentials: "include", method: "POST", body: form });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Upload failed");
       setMessage(`Uploaded ${json.count} inventory rows`);

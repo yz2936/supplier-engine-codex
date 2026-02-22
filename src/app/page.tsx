@@ -307,7 +307,7 @@ export default function HomePage() {
   const uploadInventoryFile = useCallback(async (file: File) => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch("/api/inventory/upload", { method: "POST", body: form });
+    const res = await fetch("/api/inventory/upload", { credentials: "include", method: "POST", body: form });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Upload failed");
     await loadInventoryCount();
