@@ -26,9 +26,15 @@ let pool: Pool | null = null;
 let dbReady = false;
 let fileMutex: Promise<void> = Promise.resolve();
 
+const normalizeBoolValue = (value: string | undefined) => {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/^['\"]+|['\"]+$/g, "").toLowerCase();
+};
+
 const isTrue = (value: string | undefined, fallback: boolean) => {
-  if (typeof value !== "string" || !value.trim()) return fallback;
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+  const normalized = normalizeBoolValue(value);
+  if (!normalized) return fallback;
+  return ["1", "true", "yes", "on"].includes(normalized);
 };
 
 const isCertChainError = (error: unknown) => {
@@ -38,8 +44,11 @@ const isCertChainError = (error: unknown) => {
 
 const mapDbError = (error: unknown) => {
   if (!isCertChainError(error)) return error;
+  const allowSelfSigned = normalizeBoolValue(process.env.DATABASE_SSL_ALLOW_SELF_SIGNED) || "(unset)";
+  const rejectUnauthorized = normalizeBoolValue(process.env.DATABASE_SSL_REJECT_UNAUTHORIZED) || "(unset)";
   return new Error(
-    "Database TLS validation failed (self-signed certificate). Set DATABASE_SSL_ALLOW_SELF_SIGNED=true and DATABASE_SSL_REJECT_UNAUTHORIZED=false in your environment variables."
+    "Database TLS validation failed (self-signed certificate). Set DATABASE_SSL_ALLOW_SELF_SIGNED=true and DATABASE_SSL_REJECT_UNAUTHORIZED=false in your environment variables. "
+      + `Runtime values: DATABASE_SSL_ALLOW_SELF_SIGNED=${allowSelfSigned}, DATABASE_SSL_REJECT_UNAUTHORIZED=${rejectUnauthorized}.`
   );
 };
 
