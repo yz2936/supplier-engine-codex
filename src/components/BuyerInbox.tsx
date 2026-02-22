@@ -45,7 +45,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   const selectedBuyer = buyers.find((b) => b.id === selectedBuyerId);
 
   const loadBuyers = useCallback(async () => {
-    const res = await fetch("/api/buyers");
+    const res = await fetch("/api/buyers", { credentials: "include", cache: "no-store" });
     const json = await res.json();
     if (res.ok) {
       setBuyers(json.buyers || []);
@@ -56,7 +56,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   }, [selectedBuyerId]);
 
   const loadMessages = useCallback(async (buyerId: string) => {
-    const res = await fetch(`/api/buyers/${buyerId}/messages`);
+    const res = await fetch(`/api/buyers/${buyerId}/messages`, { credentials: "include", cache: "no-store" });
     const json = await res.json();
     if (res.ok) {
       setMessages(json.messages || []);
@@ -72,6 +72,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
     if (!silent) setInfo("Syncing inbound mailbox...");
     try {
       const res = await fetch("/api/email/inbound/sync", {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: 30 })
@@ -119,6 +120,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
     setManualFilterInfo("Applying procurement filter...");
     try {
       const res = await fetch(`/api/buyers/${selectedBuyerId}/messages/filter`, {
+        credentials: "include",
         method: "POST"
       });
       const json = await res.json();
@@ -242,6 +244,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
               onClick={async () => {
                 setInfo("Saving...");
                 const res = await fetch(`/api/buyers/${selectedBuyer.id}`, {
+                  credentials: "include",
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ notes, status })

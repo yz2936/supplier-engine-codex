@@ -55,7 +55,7 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/inventory");
+      const res = await fetch("/api/inventory", { credentials: "include", cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load inventory");
 
@@ -66,7 +66,7 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
 
       const uniqueGrades = Array.from(new Set(next.map((i) => i.grade).filter(Boolean)));
       const recEntries = await Promise.all(uniqueGrades.map(async (grade) => {
-        const r = await fetch(`/api/surcharges/recommend?grade=${encodeURIComponent(grade)}`);
+        const r = await fetch(`/api/surcharges/recommend?grade=${encodeURIComponent(grade)}`, { credentials: "include", cache: "no-store" });
         if (!r.ok) return [grade, { valuePerLb: 0, source: "fallback_default" as const }] as const;
         const rec = await r.json();
         return [grade, { valuePerLb: Number(rec.valuePerLb ?? 0), source: rec.source as Recommendation["source"] }] as const;

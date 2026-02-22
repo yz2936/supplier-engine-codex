@@ -140,12 +140,46 @@ const normalizeData = (raw: AppData): AppData => {
 
 const usingDatabase = () => Boolean(dbUrl);
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isRetryableDbError = (err: unknown) => {
+  const msg = String((err as { message?: string })?.message || "").toLowerCase();
+  const code = String((err as { code?: string })?.code || "");
+  const retryCodes = new Set(["57P01", "57P02", "57P03", "53300", "53400", "08000", "08001", "08004", "08006", "40001"]);
+  return retryCodes.has(code.toUpperCase())
+    || msg.includes("timeout")
+    || msg.includes("timed out")
+    || msg.includes("econnreset")
+    || msg.includes("connection terminated")
+    || msg.includes("server closed");
+};
+
+const withDbReadRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
+  let lastError: unknown;
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableDbError(error) || i === 1) throw error;
+      await sleep(120 * (i + 1));
+    }
+  }
+  throw lastError;
+};
+
 const getPool = () => {
   if (!dbUrl) throw new Error("DATABASE_URL is missing");
   if (!pool) {
     pool = new Pool({
       connectionString: dbUrl,
-      ssl: process.env.DATABASE_SSL === "false" ? false : undefined
+      ssl: process.env.DATABASE_SSL === "false" ? false : undefined,
+      max: Number(process.env.DB_POOL_MAX || 5),
+      connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 5000),
+      idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
+      query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 10000),
+      statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 10000),
+      keepAlive: true
     });
   }
   return pool;
@@ -226,7 +260,7 @@ const withFileLock = async <T>(fn: () => Promise<T>) => {
 
 export const readData = async (): Promise<AppData> => {
   if (usingDatabase()) {
-    return readFromDb();
+    return withDbReadRetry(readFromDb);
   }
   return readFromFile();
 };

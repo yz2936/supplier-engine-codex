@@ -64,6 +64,30 @@ const decodeState = (raw: string | undefined): SessionState | null => {
   }
 };
 
+
+
+const pruneSessions = (sessions: Array<{ token: string; userId: string; createdAt: string; expiresAt: string }>) => {
+  const now = Date.now();
+  const sorted = [...sessions]
+    .filter((s) => {
+      const exp = new Date(s.expiresAt).getTime();
+      return Number.isFinite(exp) && exp > now;
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const perUser = new Map<string, number>();
+  const kept: typeof sessions = [];
+
+  for (const session of sorted) {
+    const count = perUser.get(session.userId) ?? 0;
+    if (count >= 20) continue;
+    if (kept.length >= 1000) break;
+    perUser.set(session.userId, count + 1);
+    kept.push(session);
+  }
+
+  return kept;
+};
 const toUserSnapshot = (user: AppUser, expiresAt: string): SessionState => ({
   id: user.id,
   name: user.name,
@@ -76,43 +100,69 @@ const toUserSnapshot = (user: AppUser, expiresAt: string): SessionState => ({
   expiresAt
 });
 
+
+
+const fromStateUser = (state: SessionState): AppUser => ({
+  id: state.id,
+  name: state.name,
+  email: state.email,
+  role: state.role,
+  companyId: state.companyId,
+  companyName: state.companyName,
+  onboarded: state.onboarded,
+  createdAt: state.createdAt,
+  passwordHash: ""
+});
 export const getAuthenticatedUser = async (req: Request): Promise<AppUser | null> => {
   const cookies = parseCookies(req);
   const token = cookies[COOKIE_NAME];
   const state = decodeState(cookies[STATE_COOKIE_NAME]);
+  const fallbackUser = state ? fromStateUser(state) : null;
 
   if (token) {
-    const data = await readData();
-    const session = data.sessions.find((s) => s.token === token);
-    if (session) {
-      const expiresAt = new Date(session.expiresAt).getTime();
-      if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
-        const user = data.users.find((u) => u.id === session.userId);
-        if (user) return user;
-      } else {
-        await mutateData((next) => {
-          next.sessions = next.sessions.filter((s) => s.token !== token);
-          return null;
-        });
+    try {
+      const data = await readData();
+      const session = data.sessions.find((s) => s.token === token);
+      if (session) {
+        const expiresAt = new Date(session.expiresAt).getTime();
+        if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+          const user = data.users.find((u) => u.id === session.userId);
+          if (user) return user;
+        } else {
+          await mutateData((next) => {
+            next.sessions = next.sessions.filter((s) => s.token !== token);
+            return null;
+          });
+        }
       }
+    } catch {
+      if (fallbackUser) return fallbackUser;
+      throw new Error("Auth store unavailable");
     }
   }
 
   if (!state) return null;
 
-  const data = await readData();
-  const user = data.users.find((u) => u.id === state.id || u.email === state.email);
-  if (user) return user;
-
-  return null;
+  try {
+    const data = await readData();
+    const user = data.users.find((u) => u.id === state.id || u.email === state.email);
+    if (user) return user;
+    return null;
+  } catch {
+    return fallbackUser;
+  }
 };
 
 export const requireUser = async (req: Request) => {
-  const user = await getAuthenticatedUser(req);
-  if (!user) {
-    return { ok: false as const, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) {
+      return { ok: false as const, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    }
+    return { ok: true as const, user };
+  } catch {
+    return { ok: false as const, response: NextResponse.json({ error: "Auth service temporarily unavailable. Please retry." }, { status: 503 }) };
   }
-  return { ok: true as const, user };
 };
 
 export const requireRole = async (req: Request, roles: UserRole[]) => {
@@ -130,7 +180,9 @@ export const createSession = async (userId: string) => {
   const expiresAt = new Date(now.getTime() + SESSION_TTL_MS).toISOString();
 
   await mutateData((data) => {
+    data.sessions = pruneSessions(data.sessions);
     data.sessions.push({ token, userId, createdAt: now.toISOString(), expiresAt });
+    data.sessions = pruneSessions(data.sessions);
     return null;
   });
 

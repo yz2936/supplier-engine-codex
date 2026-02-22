@@ -207,7 +207,7 @@ export default function HomePage() {
   const draft = useMemo(() => draftQuoteText(customerName, lines, total, draftMeta), [customerName, lines, total, draftMeta]);
 
   const loadCurrentUser = useCallback(async () => {
-    const res = await fetch("/api/auth/me");
+    const res = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
     const json = await res.json();
     setUser(json.user ?? null);
     if (json.user) {
@@ -218,7 +218,7 @@ export default function HomePage() {
   }, []);
 
   const loadInventoryCount = useCallback(async () => {
-    const res = await fetch("/api/inventory");
+    const res = await fetch("/api/inventory", { credentials: "include", cache: "no-store" });
     if (!res.ok) return;
     const json = await res.json();
     setInventoryCount(json.inventory?.length ?? 0);
@@ -257,6 +257,7 @@ export default function HomePage() {
     setError("");
     try {
       const res = await fetch("/api/parse", {
+        credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, marginPercent: margin, llmProvider }),
@@ -295,6 +296,7 @@ export default function HomePage() {
     const finalLines = override?.lines ?? lines;
     const finalTotal = override?.total ?? total;
     const res = await fetch("/api/quotes", {
+      credentials: "include",
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ customerName, itemsQuoted: finalLines, totalPrice: finalTotal, status: "Draft" })
@@ -415,6 +417,7 @@ export default function HomePage() {
                 onClick={async () => {
                   setAuthError("");
                   const res = await fetch("/api/auth/login", {
+                    credentials: "include",
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: loginEmail, password: loginPassword })
@@ -443,6 +446,7 @@ export default function HomePage() {
                 onClick={async () => {
                   setAuthError("");
                   const res = await fetch("/api/auth/register", {
+                    credentials: "include",
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, role: regRole })
@@ -484,6 +488,7 @@ export default function HomePage() {
               setOnboardingBusy(true);
               try {
                 const res = await fetch("/api/auth/onboarding", {
+                  credentials: "include",
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ name: onboardingName, companyName: onboardingCompany, role: onboardingRole })
@@ -562,7 +567,7 @@ export default function HomePage() {
           <button
             className="btn-secondary w-full"
             onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
+              await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
               setUser(null);
               setLines([]);
               setTotal(0);

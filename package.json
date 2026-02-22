@@ -6,7 +6,7 @@
     "dev": "rm -rf .next && next dev",
     "build": "rm -rf .next && next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "seed": "node scripts/seed.mjs"
   },

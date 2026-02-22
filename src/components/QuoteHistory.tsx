@@ -8,7 +8,7 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
 
   const load = async () => {
-    const res = await fetch("/api/quotes");
+    const res = await fetch("/api/quotes", { credentials: "include", cache: "no-store" });
     const json = await res.json();
     setQuotes(json.quotes || []);
   };
@@ -44,6 +44,7 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
                   onChange={async (e) => {
                     const status = e.target.value;
                     await fetch(`/api/quotes/${q.id}`, {
+                      credentials: "include",
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ status })

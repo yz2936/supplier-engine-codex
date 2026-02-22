@@ -1,60 +1,78 @@
-import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
+import { createSession, setSessionCookie } from "@/lib/server-auth";
 import { mutateData } from "@/lib/data-store";
-import { setSessionCookie } from "@/lib/server-auth";
 import { hashPassword, normalizeEmail } from "@/lib/security";
 import { UserRole } from "@/lib/types";
 
 const validRoles: UserRole[] = ["sales_rep", "inventory_manager", "sales_manager"];
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
+const missingPersistentDb = () => Boolean(process.env.VERCEL && !process.env.DATABASE_URL?.trim());
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const name = String(body.name ?? "").trim();
-  const email = normalizeEmail(String(body.email ?? ""));
-  const password = String(body.password ?? "");
-  const role = body.role as UserRole;
-
-  if (!name || !email || !password || !validRoles.includes(role)) {
-    return NextResponse.json({ error: "name, email, password, and valid role are required" }, { status: 400 });
-  }
-  if (password.length < 8) {
-    return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
-  }
-
-  const result = await mutateData((data) => {
-    if (data.users.some((u) => u.email === email)) {
-      return { ok: false as const, status: 409 as const, error: "Email already registered" };
+  try {
+    if (missingPersistentDb()) {
+      return NextResponse.json({
+        error: "Persistent storage is not configured. Set DATABASE_URL in Vercel environment variables."
+      }, { status: 503 });
     }
 
-    const now = new Date();
-    const user = {
-      id: crypto.randomUUID(),
-      name,
-      email,
-      passwordHash: hashPassword(password),
-      role,
-      companyId: `c_${crypto.randomUUID().slice(0, 8)}`,
-      companyName: "",
-      onboarded: false,
-      createdAt: now.toISOString()
-    };
+    const body = await req.json();
+    const name = String(body.name ?? "").trim();
+    const email = normalizeEmail(String(body.email ?? ""));
+    const password = String(body.password ?? "").trim();
+    const role = body.role as UserRole;
 
-    const token = randomBytes(24).toString("hex");
-    const expiresAt = new Date(now.getTime() + SESSION_TTL_MS).toISOString();
+    if (!name || !email || !password || !validRoles.includes(role)) {
+      return NextResponse.json({ error: "name, email, password, and valid role are required" }, { status: 400 });
+    }
+    if (password.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+    }
 
-    data.users.push(user);
-    data.sessions.push({ token, userId: user.id, createdAt: now.toISOString(), expiresAt });
+    const result = await mutateData((data) => {
+      if (data.users.some((u) => u.email === email)) {
+        return { ok: false as const, status: 409 as const, error: "Email already registered" };
+      }
 
-    return { ok: true as const, user, token, expiresAt };
-  });
+      const now = new Date();
+      const user = {
+        id: crypto.randomUUID(),
+        name,
+        email,
+        passwordHash: hashPassword(password),
+        role,
+        companyId: `c_${crypto.randomUUID().slice(0, 8)}`,
+        companyName: "",
+        onboarded: false,
+        createdAt: now.toISOString()
+      };
 
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
+      data.users.push(user);
+      return { ok: true as const, user };
+    });
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    const { user } = result;
+    const { token, expiresAt } = await createSession(user.id);
+
+    const res = NextResponse.json({
+      ok: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        companyId: user.companyId,
+        companyName: user.companyName,
+        onboarded: user.onboarded,
+        createdAt: user.createdAt
+      }
+    });
+    setSessionCookie(res, token, expiresAt, user);
+    return res;
+  } catch {
+    return NextResponse.json({ error: "Registration service temporarily unavailable. Please retry." }, { status: 503 });
   }
-
-  const { user, token, expiresAt } = result;
-  const res = NextResponse.json({ ok: true, user: { ...user, passwordHash: undefined } });
-  setSessionCookie(res, token, expiresAt, user);
-  return res;
 }

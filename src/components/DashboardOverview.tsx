@@ -147,7 +147,7 @@ export function DashboardOverview() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/dashboard");
+      const res = await fetch("/api/dashboard", { credentials: "include", cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load dashboard");
       setData(json as DashboardPayload);

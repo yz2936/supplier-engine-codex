@@ -3,6 +3,9 @@ import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 import { SourcingRequestItem } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const cleanItems = (raw: unknown): SourcingRequestItem[] => {
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => {
@@ -21,69 +24,80 @@ const cleanItems = (raw: unknown): SourcingRequestItem[] => {
 };
 
 export async function GET(req: Request) {
-  const auth = await requireRole(req, ["sales_rep", "inventory_manager", "sales_manager"]);
-  if (!auth.ok) return auth.response;
+  try {
+    const auth = await requireRole(req, ["sales_rep", "inventory_manager", "sales_manager"]);
+    if (!auth.ok) return auth.response;
 
-  const data = await readData();
-  const list = data.sourcingRequests
-    .filter((r) => auth.user.role === "sales_manager" || r.createdByUserId === auth.user.id)
-    .map((r) => {
-      const manufacturer = data.manufacturers.find((m) => m.id === r.manufacturerId);
-      return {
-        ...r,
-        manufacturerEmail: manufacturer?.email ?? r.manufacturerEmail
-      };
-    })
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const data = await readData();
+    const list = data.sourcingRequests
+      .filter((r) => auth.user.role === "sales_manager" || r.createdByUserId === auth.user.id)
+      .map((r) => {
+        const manufacturer = data.manufacturers.find((m) => m.id === r.manufacturerId);
+        return {
+          ...r,
+          manufacturerEmail: manufacturer?.email ?? r.manufacturerEmail
+        };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  return NextResponse.json({ requests: list });
+    return NextResponse.json(
+      { requests: list },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+    );
+  } catch {
+    return NextResponse.json({ error: "Sourcing service temporarily unavailable. Please retry." }, { status: 503 });
+  }
 }
 
 export async function POST(req: Request) {
-  const auth = await requireRole(req, ["sales_rep", "inventory_manager", "sales_manager"]);
-  if (!auth.ok) return auth.response;
+  try {
+    const auth = await requireRole(req, ["sales_rep", "inventory_manager", "sales_manager"]);
+    if (!auth.ok) return auth.response;
 
-  const body = await req.json();
-  const manufacturerId = String(body.manufacturerId ?? "").trim();
-  const reason = String(body.reason ?? "new_demand") as "low_stock" | "out_of_stock" | "new_demand";
-  const sourceContext = String(body.sourceContext ?? "quote_shortage") as "quote_shortage" | "inventory_restock";
-  const customerName = String(body.customerName ?? "").trim() || undefined;
-  const notes = String(body.notes ?? "").trim() || undefined;
-  const items = cleanItems(body.items);
+    const body = await req.json();
+    const manufacturerId = String(body.manufacturerId ?? "").trim();
+    const reason = String(body.reason ?? "new_demand") as "low_stock" | "out_of_stock" | "new_demand";
+    const sourceContext = String(body.sourceContext ?? "quote_shortage") as "quote_shortage" | "inventory_restock";
+    const customerName = String(body.customerName ?? "").trim() || undefined;
+    const notes = String(body.notes ?? "").trim() || undefined;
+    const items = cleanItems(body.items);
 
-  if (!manufacturerId) {
-    return NextResponse.json({ error: "manufacturerId is required" }, { status: 400 });
-  }
-  if (!items.length) {
-    return NextResponse.json({ error: "At least one sourcing item is required" }, { status: 400 });
-  }
-
-  const result = await mutateData((data) => {
-    const manufacturer = data.manufacturers.find((m) => m.id === manufacturerId);
-    if (!manufacturer) {
-      return { ok: false as const, status: 404 as const, error: "Manufacturer not found" };
+    if (!manufacturerId) {
+      return NextResponse.json({ error: "manufacturerId is required" }, { status: 400 });
+    }
+    if (!items.length) {
+      return NextResponse.json({ error: "At least one sourcing item is required" }, { status: 400 });
     }
 
-    const now = new Date().toISOString();
-    const request = {
-      id: crypto.randomUUID(),
-      createdByUserId: auth.user.id,
-      customerName,
-      manufacturerId: manufacturer.id,
-      manufacturerName: manufacturer.name,
-      status: "Open" as const,
-      reason,
-      sourceContext,
-      items,
-      notes,
-      createdAt: now,
-      updatedAt: now
-    };
+    const result = await mutateData((data) => {
+      const manufacturer = data.manufacturers.find((m) => m.id === manufacturerId);
+      if (!manufacturer) {
+        return { ok: false as const, status: 404 as const, error: "Manufacturer not found" };
+      }
 
-    data.sourcingRequests.push(request);
-    return { ok: true as const, request };
-  });
+      const now = new Date().toISOString();
+      const request = {
+        id: crypto.randomUUID(),
+        createdByUserId: auth.user.id,
+        customerName,
+        manufacturerId: manufacturer.id,
+        manufacturerName: manufacturer.name,
+        status: "Open" as const,
+        reason,
+        sourceContext,
+        items,
+        notes,
+        createdAt: now,
+        updatedAt: now
+      };
 
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-  return NextResponse.json({ ok: true, request: result.request });
+      data.sourcingRequests.push(request);
+      return { ok: true as const, request };
+    });
+
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ ok: true, request: result.request });
+  } catch {
+    return NextResponse.json({ error: "Sourcing request failed due to temporary service issues. Please retry." }, { status: 503 });
+  }
 }

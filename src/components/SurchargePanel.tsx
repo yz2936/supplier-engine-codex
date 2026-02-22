@@ -26,6 +26,7 @@ export function SurchargePanel({ onSaved }: { onSaved: () => void }) {
         onClick={async () => {
           setStatus("Saving...");
           const res = await fetch("/api/surcharges", {
+            credentials: "include",
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ grade, valuePerLb })
