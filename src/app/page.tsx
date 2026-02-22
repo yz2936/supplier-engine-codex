@@ -539,21 +539,21 @@ export default function HomePage() {
   return (
     <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-5">
       <div className={layoutClass}>
-        <aside className="h-fit space-y-3 border-r border-steel-200/80 pr-3 lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
+        <aside className="h-fit space-y-3 border-r border-[#10254f] bg-[#0b1a48] p-3 text-white lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
               <div className={`space-y-0.5 ${sidebarCollapsed ? "hidden lg:hidden" : ""}`}>
-                <h1 className="font-['Sora'] text-xl font-semibold text-steel-900">Stainless Logic</h1>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-steel-500">Procurement OS</p>
+                <h1 className="font-['Sora'] text-xl font-semibold text-white">Stainless Logic</h1>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/70">Procurement OS</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button className="btn-secondary px-2 py-1 text-xs lg:hidden" onClick={() => setMobileNavOpen((v) => !v)}>
+              <button className="border border-white/40 bg-white/10 px-2 py-1 text-xs text-white lg:hidden" onClick={() => setMobileNavOpen((v) => !v)}>
                 {mobileNavOpen ? "Close" : "Menu"}
               </button>
               <button
-                className="btn-secondary hidden h-8 w-8 items-center justify-center px-0 py-0 lg:inline-flex"
+                className="hidden h-8 w-8 items-center justify-center border border-white/40 bg-white/10 px-0 py-0 text-white lg:inline-flex"
                 onClick={() => setSidebarCollapsed((v) => !v)}
                 title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
@@ -564,16 +564,16 @@ export default function HomePage() {
             </div>
           </div>
           {!sidebarCollapsed && (
-            <div className="border-b border-steel-200/80 pb-2.5 text-sm">
-              <div className="font-semibold text-steel-900">{user.name}</div>
-              <div className="hidden text-steel-700 sm:block">{user.email}</div>
-              <div className="mt-2 inline-flex rounded-full bg-[#0b1a48] px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
-              <div className="mt-2 text-xs text-steel-500">{user.companyName}</div>
+            <div className="border-b border-white/25 pb-2.5 text-sm">
+              <div className="font-semibold text-white">{user.name}</div>
+              <div className="hidden text-white/80 sm:block">{user.email}</div>
+              <div className="mt-2 inline-flex rounded-full bg-white/15 px-2.5 py-1 text-[11px] text-white">{roleLabel(user.role)}</div>
+              <div className="mt-2 text-xs text-white/70">{user.companyName}</div>
             </div>
           )}
 
           <nav className={`space-y-1.5 ${mobileNavOpen ? "block" : "hidden"} lg:block`}>
-            {!sidebarCollapsed && <div className="section-title">Navigation</div>}
+            {!sidebarCollapsed && <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">Navigation</div>}
             {([
               "dashboard",
               "workspace",
@@ -588,13 +588,13 @@ export default function HomePage() {
                 onClick={() => setActiveView(v)}
                 className={
                   activeView === v
-                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-[#0b1a48] bg-white/50 px-3 py-2 text-left text-sm font-medium text-steel-900`
-                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-transparent px-3 py-2 text-left text-sm text-steel-800 transition hover:border-orange-300 hover:bg-white/40`
+                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-orange-400 bg-white/15 px-3 py-2 text-left text-sm font-medium text-white`
+                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-transparent px-3 py-2 text-left text-sm text-white/85 transition hover:border-orange-300 hover:bg-white/10`
                 }
                 title={sidebarCollapsed ? viewMeta[v].label : undefined}
               >
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className={activeView === v ? "text-white" : "text-steel-600"}>
+                  <span className={activeView === v ? "text-white" : "text-white/85"}>
                     {renderNavIcon(v)}
                   </span>
                   {!sidebarCollapsed && <span className="truncate">{viewMeta[v].label}</span>}
@@ -605,7 +605,7 @@ export default function HomePage() {
           </nav>
 
           <button
-            className="btn-secondary w-full lg:mt-auto"
+            className="w-full border border-white/40 bg-white/10 px-3 py-2 text-sm font-medium text-white lg:mt-auto"
             onClick={async () => {
               await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
               setUser(null);
