@@ -80,6 +80,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [requests, setRequests] = useState<SourcingRequest[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Record<string, boolean>>({});
+  const [manualCandidates, setManualCandidates] = useState<Candidate[]>([]);
   const [manufacturerId, setManufacturerId] = useState("");
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState("");
@@ -158,60 +159,48 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     [inventory]
   );
 
-  const seedCandidate = useMemo(() => {
-    if (!initialInventorySeed) return null;
+  useEffect(() => {
+    if (!initialInventorySeed) return;
 
-    const fromSeed = {
+    const seeded: Candidate = {
       key: `i-${initialInventorySeed.sku}`,
-      sourceContext: "inventory_restock" as const,
-      reason: (initialInventorySeed.qtyOnHand <= 0 ? "out_of_stock" : "low_stock") as "out_of_stock" | "low_stock",
+      sourceContext: "inventory_restock",
+      reason: initialInventorySeed.qtyOnHand <= 0 ? "out_of_stock" : "low_stock",
       sku: initialInventorySeed.sku,
       productType: initialInventorySeed.category,
       grade: initialInventorySeed.grade,
       dimension: `${initialInventorySeed.thickness} x ${initialInventorySeed.width} x ${initialInventorySeed.length}${initialInventorySeed.schedule ? ` SCH ${initialInventorySeed.schedule}` : ""}`,
       quantity: Math.max(1, 1000 - initialInventorySeed.qtyOnHand),
-      unit: "pcs" as const,
+      unit: "pcs",
       requestedLength: initialInventorySeed.length
     };
 
-    const found = inventory.find((i) => i.sku === initialInventorySeed.sku);
-    if (!found) return fromSeed;
+    setManualCandidates((prev) => {
+      const next = prev.filter((c) => c.key !== seeded.key);
+      next.push(seeded);
+      return next;
+    });
 
-    return {
-      key: `i-${found.sku}`,
-      sourceContext: "inventory_restock" as const,
-      reason: (found.qtyOnHand <= 0 ? "out_of_stock" : "low_stock") as "out_of_stock" | "low_stock",
-      sku: found.sku,
-      productType: found.category,
-      grade: found.grade,
-      dimension: `${found.thickness} x ${found.width} x ${found.length}${found.schedule ? ` SCH ${found.schedule}` : ""}`,
-      quantity: Math.max(1, 1000 - found.qtyOnHand),
-      unit: "pcs" as const,
-      requestedLength: found.length
-    };
-  }, [initialInventorySeed, inventory]);
+    setCandidateFilter("inventory_restock");
+    setSelectedKeys((prev) => ({ ...prev, [seeded.key]: true }));
+    setStatus(`Loaded ${initialInventorySeed.sku} into sourcing candidates.`);
+    onSeedConsumed?.();
+  }, [initialInventorySeed, onSeedConsumed]);
 
   const candidates = useMemo(() => {
-    const merged = [...quoteShortages, ...inventoryRestock];
-    if (seedCandidate && !merged.some((c) => c.key === seedCandidate.key)) merged.push(seedCandidate);
-    return merged;
-  }, [inventoryRestock, quoteShortages, seedCandidate]);
+    const byKey = new Map<string, Candidate>();
+    for (const c of quoteShortages) byKey.set(c.key, c);
+    for (const c of inventoryRestock) byKey.set(c.key, c);
+    for (const c of manualCandidates) byKey.set(c.key, c);
+    return Array.from(byKey.values());
+  }, [inventoryRestock, manualCandidates, quoteShortages]);
+
   const visibleCandidates = useMemo(
     () => candidateFilter === "all" ? candidates : candidates.filter((c) => c.sourceContext === candidateFilter),
     [candidateFilter, candidates]
   );
 
   const selected = candidates.filter((c) => selectedKeys[c.key]);
-
-  useEffect(() => {
-    if (!initialInventorySeed) return;
-    const key = `i-${initialInventorySeed.sku}`;
-    if (!candidates.some((c) => c.key === key)) return;
-    setCandidateFilter("inventory_restock");
-    setSelectedKeys((prev) => ({ ...prev, [key]: true }));
-    setStatus(`Loaded ${initialInventorySeed.sku} into sourcing candidates.`);
-    onSeedConsumed?.();
-  }, [candidates, initialInventorySeed, onSeedConsumed]);
 
   const createRequest = async () => {
     if (!selected.length) return setStatus("Select at least one item to source.");
