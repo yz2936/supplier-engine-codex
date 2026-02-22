@@ -25,7 +25,7 @@ import {
 
 type Toast = { id: string; message: string };
 
-const sectionClass = "border-t border-slate-200 pt-5 first:border-t-0 first:pt-0";
+const sectionClass = "border-t border-slate-200 pt-4 first:border-t-0 first:pt-0";
 
 const emptyFilters: QueueFilters = { customer: "", dueDate: "", status: "all" };
 
@@ -232,7 +232,7 @@ export function QuotingEngineScreen() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-slate-50/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1700px] items-center gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-[1700px] items-center gap-2.5 px-4 py-2.5">
           <div className="text-lg font-semibold tracking-tight">Quoting Engine</div>
           <div className="max-w-md flex-1">
             <input
@@ -249,11 +249,11 @@ export function QuotingEngineScreen() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1700px] grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <main className="mx-auto grid max-w-[1700px] grid-cols-1 gap-3 px-4 py-3 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside
           className={`border border-slate-200 bg-white transition-all ${queueCollapsed ? "w-[78px] overflow-hidden" : "w-full"}`}
         >
-          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5">
             {!queueCollapsed && <div className="text-sm font-semibold">Work Queue</div>}
             <button
               className="rounded-md border border-slate-300 px-2 py-1 text-xs"
@@ -282,7 +282,7 @@ export function QuotingEngineScreen() {
           </div>
 
           {!queueCollapsed && (
-            <div className="space-y-2 border-b border-slate-200 p-3">
+            <div className="space-y-2 border-b border-slate-200 p-2.5">
               <input
                 className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
                 placeholder="Filter customer"
@@ -310,7 +310,7 @@ export function QuotingEngineScreen() {
             </div>
           )}
 
-          <div className="max-h-[calc(100vh-280px)] space-y-2 overflow-auto p-3">
+          <div className="max-h-[calc(100vh-280px)] space-y-2 overflow-auto p-2.5">
             {queueLoading && (
               <div className="space-y-2">
                 <div className="h-20 animate-pulse rounded-lg bg-slate-100" />
@@ -322,7 +322,7 @@ export function QuotingEngineScreen() {
               visibleRfqs.map((rfq) => (
                 <button
                   key={rfq.id}
-                  className={`w-full border p-3 text-left text-xs ${
+                  className={`w-full border px-3 py-2.5 text-left text-xs ${
                     selectedRfqId === rfq.id ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-300"
                   }`}
                   onClick={() => setSelectedRfqId(rfq.id)}
@@ -353,7 +353,7 @@ export function QuotingEngineScreen() {
           </div>
         </aside>
 
-        <section className="border border-slate-200 bg-white p-4">
+        <section className="border border-slate-200 bg-white p-3">
           {workspaceLoading && (
             <div className="space-y-3">
               <div className="h-16 animate-pulse bg-slate-100" />
@@ -369,7 +369,7 @@ export function QuotingEngineScreen() {
 
           {!workspaceLoading && workspace && (
             <>
-              <div className="grid gap-3 border-b border-slate-200 pb-4 lg:grid-cols-[1.2fr_1fr]">
+              <div className="grid gap-2.5 border-b border-slate-200 pb-3 lg:grid-cols-[1.2fr_1fr]">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Overview</div>
                   <div className="mt-1 text-2xl font-semibold text-slate-900">Quote Workspace</div>
@@ -384,7 +384,7 @@ export function QuotingEngineScreen() {
                   ].map((step) => (
                     <span
                       key={step.label}
-                      className={`inline-flex items-center gap-1 border px-2 py-2 ${
+                      className={`inline-flex items-center gap-1 border px-2 py-1.5 ${
                         step.ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500"
                       }`}
                     >
@@ -396,7 +396,7 @@ export function QuotingEngineScreen() {
 
               <section className={sectionClass}>
                 <div className="mb-2 text-sm font-semibold">A. RFQ Summary</div>
-                <p className="mb-3 text-xs text-slate-500">Review source context first, then confirm line structure below.</p>
+                <p className="mb-2 text-xs text-slate-500">Review source context first, then confirm line structure below.</p>
                 <div className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-5">
                   <div><span className="text-slate-500">Customer</span><div className="font-medium">{workspace.customerName}</div></div>
                   <div><span className="text-slate-500">RFQ ID</span><div className="font-medium">{workspace.id}</div></div>
@@ -404,8 +404,8 @@ export function QuotingEngineScreen() {
                   <div><span className="text-slate-500">Due</span><div className="font-medium">{workspace.dueDate}</div></div>
                   <div><span className="text-slate-500">Project</span><div className="font-medium">{workspace.projectName || "-"}</div></div>
                 </div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-                  <div className="p-3 text-xs">
+                <div className="mt-2.5 grid gap-2.5 lg:grid-cols-[1.2fr_1fr]">
+                  <div className="p-2.5 text-xs">
                     <div className="mb-1 font-medium text-slate-700">Source Files</div>
                     <div className="space-y-1">
                       {workspace.sourceFiles.map((f) => (
@@ -416,7 +416,7 @@ export function QuotingEngineScreen() {
                       ))}
                     </div>
                   </div>
-                  <div className="p-3 text-xs">
+                  <div className="p-2.5 text-xs">
                     <div className="mb-1 font-medium text-slate-700">Key Notes</div>
                     <p className="leading-5 text-slate-700">{workspace.keyNotes || "No key notes available."}</p>
                   </div>
@@ -424,7 +424,7 @@ export function QuotingEngineScreen() {
               </section>
 
               <section className={sectionClass}>
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-1.5 flex items-center justify-between">
                   <div>
                     <div className="text-sm font-semibold">B. Line Items</div>
                     <p className="text-xs text-slate-500">Inline edit critical fields quickly. Select a row for detailed controls.</p>
@@ -434,7 +434,7 @@ export function QuotingEngineScreen() {
                   </div>
                 </div>
 
-                <div className="mb-2 flex flex-wrap items-center gap-2">
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
                   <input
                     className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
                     placeholder="Search line items"
@@ -442,7 +442,7 @@ export function QuotingEngineScreen() {
                     onChange={(e) => setSearch(e.target.value)}
                   />
                   <button
-                    className="border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    className="border border-slate-300 bg-white px-2 py-1 text-xs"
                     onClick={() => {
                       const nextLine = (workspace.lineItems.at(-1)?.lineNumber || 0) + 1;
                       const next: LineItem = {
@@ -464,7 +464,7 @@ export function QuotingEngineScreen() {
                     Add row
                   </button>
                   <button
-                    className="border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    className="border border-slate-300 bg-white px-2 py-1 text-xs"
                     onClick={() => {
                       if (!selectedLine) return;
                       const duplicate = { ...selectedLine, id: crypto.randomUUID(), lineNumber: workspace.lineItems.length + 1 };
@@ -475,7 +475,7 @@ export function QuotingEngineScreen() {
                     Duplicate row
                   </button>
                   <button
-                    className="border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                    className="border border-slate-300 bg-white px-2 py-1 text-xs"
                     onClick={() => {
                       if (!selectedLine) return;
                       setWorkspace((prev) =>
@@ -506,7 +506,7 @@ export function QuotingEngineScreen() {
                         ].map(([key, label]) => (
                           <th
                             key={key}
-                            className="border-b border-slate-200 px-2 py-2 text-left font-semibold"
+                            className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold"
                           >
                             <button
                               className="inline-flex items-center gap-1"
@@ -582,8 +582,8 @@ export function QuotingEngineScreen() {
 
               <section className={sectionClass}>
                 <div className="mb-2 text-sm font-semibold">C. Pricing & Terms</div>
-                <p className="mb-3 text-xs text-slate-500">Capture assumptions explicitly to reduce back-and-forth with buyers.</p>
-                <div className="mb-3 grid gap-2 md:grid-cols-3 lg:grid-cols-6">
+                <p className="mb-2 text-xs text-slate-500">Capture assumptions explicitly to reduce back-and-forth with buyers.</p>
+                <div className="mb-2.5 grid gap-2 md:grid-cols-3 lg:grid-cols-6">
                   <div className="border border-slate-200 p-2 text-xs">
                     <div className="text-slate-500">Subtotal</div>
                     <div className="text-sm font-semibold">{money(subtotal)}</div>
@@ -621,7 +621,7 @@ export function QuotingEngineScreen() {
                   <textarea className="min-h-20 border border-slate-300 px-2 py-2 text-xs md:col-span-3" placeholder="Assumptions (recommended)" value={workspace.pricingTerms.assumptions} onChange={(e) => updateTerms({ assumptions: e.target.value })} />
                 </div>
 
-                <div className="mt-3 border-t border-slate-200 pt-3 text-xs">
+                <div className="mt-2.5 border-t border-slate-200 pt-2.5 text-xs">
                   <div className="mb-1 font-medium text-slate-700">Price Compared to Last Quote</div>
                   {lastComparison ? (
                     <div className="grid gap-2 md:grid-cols-3">
@@ -649,12 +649,12 @@ export function QuotingEngineScreen() {
         </section>
 
         {!workspaceLoading && workspace && selectedLine && (
-          <aside className="fixed inset-y-0 right-0 z-30 w-full border-l border-slate-200 bg-white p-4 shadow-xl lg:static lg:h-fit lg:w-[360px] lg:border">
+          <aside className="fixed inset-y-0 right-0 z-30 w-full border-l border-slate-200 bg-white p-3 shadow-xl lg:static lg:h-fit lg:w-[360px] lg:border">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-sm font-semibold">D. Line Item Drawer</div>
               <button className="border border-slate-300 px-2 py-1 text-xs lg:hidden" onClick={() => setSelectedLineId("")}>Close</button>
             </div>
-            <p className="mb-3 text-xs text-slate-500">Adjust detailed values here; keep table edits quick and minimal.</p>
+            <p className="mb-2 text-xs text-slate-500">Adjust detailed values here; keep table edits quick and minimal.</p>
 
             <div className="space-y-2 text-xs">
               <label className="block">
@@ -671,7 +671,7 @@ export function QuotingEngineScreen() {
               </label>
             </div>
 
-            <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
+            <div className="mt-3 border-t border-slate-200 pt-2.5 text-xs">
               <div className="mb-1 font-medium text-slate-700">Inventory Match (read-only)</div>
               {!drawerMatch ? (
                 <div className="text-slate-500">Loading inventory match...</div>
@@ -685,7 +685,7 @@ export function QuotingEngineScreen() {
               )}
             </div>
 
-            <div className="mt-4 space-y-2 text-xs">
+            <div className="mt-3 space-y-1.5 text-xs">
               <div className="font-medium text-slate-700">Supplier Cost Inputs</div>
               <input className="w-full rounded border border-slate-300 px-2 py-1.5" type="number" placeholder="Cost" value={selectedLine.supplierCost ?? ""} onChange={(e) => updateLine(selectedLine.id, { supplierCost: Number(e.target.value || 0) })} />
               <input className="w-full rounded border border-slate-300 px-2 py-1.5" type="number" placeholder="MOQ" value={selectedLine.moq ?? ""} onChange={(e) => updateLine(selectedLine.id, { moq: Number(e.target.value || 0) })} />
@@ -693,7 +693,7 @@ export function QuotingEngineScreen() {
               <input className="w-full rounded border border-slate-300 px-2 py-1.5" placeholder="Coating / Finish" value={selectedLine.finish ?? ""} onChange={(e) => updateLine(selectedLine.id, { finish: e.target.value })} />
             </div>
 
-            <div className="mt-4 border-t border-slate-200 pt-3 text-xs">
+            <div className="mt-3 border-t border-slate-200 pt-2.5 text-xs">
               <div className="mb-1 font-medium text-slate-700">Risk Flags (read-only)</div>
               <div className="flex flex-wrap gap-1.5">
                 {drawerRisks.map((risk) => (
@@ -704,7 +704,7 @@ export function QuotingEngineScreen() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 className="border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
                 onClick={() => {
@@ -728,7 +728,7 @@ export function QuotingEngineScreen() {
         )}
 
         {!workspaceLoading && workspace && !selectedLine && (
-          <aside className="hidden border border-dashed border-slate-300 bg-white p-4 text-xs text-slate-600 lg:block">
+          <aside className="hidden border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-600 lg:block">
             <div className="mb-1 text-sm font-semibold text-slate-800">Line Item Drawer</div>
             <p>Select a line item to view inventory match, risks, and advanced cost fields.</p>
           </aside>
@@ -736,10 +736,10 @@ export function QuotingEngineScreen() {
       </main>
 
       <div className="sticky bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1700px] flex-wrap items-center gap-2 px-4 py-3">
-          <button className="rounded-md bg-slate-900 px-3 py-2 text-sm text-white" onClick={handleSaveDraft}>Save Draft</button>
+        <div className="mx-auto flex max-w-[1700px] flex-wrap items-center gap-2 px-4 py-2.5">
+          <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white" onClick={handleSaveDraft}>Save Draft</button>
           <button
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
             onClick={async () => {
               if (!workspace) return;
               const result = await generateQuote(workspace.id);
@@ -749,7 +749,7 @@ export function QuotingEngineScreen() {
             Generate Quote PDF
           </button>
           <button
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
             onClick={async () => {
               if (!workspace) return;
               const result = await sendQuote(workspace.id);
@@ -758,8 +758,8 @@ export function QuotingEngineScreen() {
           >
             Send to Customer
           </button>
-          <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">Export Excel</button>
-          <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">Add Internal Comment</button>
+          <button className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">Export Excel</button>
+          <button className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">Add Internal Comment</button>
           <div className="ml-auto text-xs text-slate-600">
             {savedAt ? `Draft saved at ${new Date(savedAt).toLocaleTimeString()}` : "Draft not saved yet"}
           </div>
