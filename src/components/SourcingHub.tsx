@@ -52,10 +52,21 @@ type Candidate = {
   requestedLength?: number;
 };
 
+type InventorySeed = {
+  sku: string;
+  category: string;
+  grade: string;
+  thickness: number;
+  width: number;
+  length: number;
+  schedule?: string;
+  qtyOnHand: number;
+};
+
 type Props = {
   customerName: string;
   quoteLines: QuoteLine[];
-  initialInventorySku?: string;
+  initialInventorySeed?: InventorySeed;
   onSeedConsumed?: () => void;
 };
 
@@ -64,7 +75,7 @@ const sortManufacturers = (list: Manufacturer[]) => [...list].sort((a, b) => {
   return a.preferred ? -1 : 1;
 });
 
-export function SourcingHub({ customerName, quoteLines, initialInventorySku, onSeedConsumed }: Props) {
+export function SourcingHub({ customerName, quoteLines, initialInventorySeed, onSeedConsumed }: Props) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [requests, setRequests] = useState<SourcingRequest[]>([]);
@@ -148,9 +159,24 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
   );
 
   const seedCandidate = useMemo(() => {
-    if (!initialInventorySku) return null;
-    const found = inventory.find((i) => i.sku === initialInventorySku);
-    if (!found) return null;
+    if (!initialInventorySeed) return null;
+
+    const fromSeed = {
+      key: `i-${initialInventorySeed.sku}`,
+      sourceContext: "inventory_restock" as const,
+      reason: (initialInventorySeed.qtyOnHand <= 0 ? "out_of_stock" : "low_stock") as "out_of_stock" | "low_stock",
+      sku: initialInventorySeed.sku,
+      productType: initialInventorySeed.category,
+      grade: initialInventorySeed.grade,
+      dimension: `${initialInventorySeed.thickness} x ${initialInventorySeed.width} x ${initialInventorySeed.length}${initialInventorySeed.schedule ? ` SCH ${initialInventorySeed.schedule}` : ""}`,
+      quantity: Math.max(1, 1000 - initialInventorySeed.qtyOnHand),
+      unit: "pcs" as const,
+      requestedLength: initialInventorySeed.length
+    };
+
+    const found = inventory.find((i) => i.sku === initialInventorySeed.sku);
+    if (!found) return fromSeed;
+
     return {
       key: `i-${found.sku}`,
       sourceContext: "inventory_restock" as const,
@@ -163,7 +189,7 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
       unit: "pcs" as const,
       requestedLength: found.length
     };
-  }, [initialInventorySku, inventory]);
+  }, [initialInventorySeed, inventory]);
 
   const candidates = useMemo(() => {
     const merged = [...quoteShortages, ...inventoryRestock];
@@ -178,12 +204,14 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySku, onS
   const selected = candidates.filter((c) => selectedKeys[c.key]);
 
   useEffect(() => {
-    if (!initialInventorySku) return;
-    const key = `i-${initialInventorySku}`;
+    if (!initialInventorySeed) return;
+    const key = `i-${initialInventorySeed.sku}`;
     if (!candidates.some((c) => c.key === key)) return;
+    setCandidateFilter("inventory_restock");
     setSelectedKeys((prev) => ({ ...prev, [key]: true }));
+    setStatus(`Loaded ${initialInventorySeed.sku} into sourcing candidates.`);
     onSeedConsumed?.();
-  }, [candidates, initialInventorySku, onSeedConsumed]);
+  }, [candidates, initialInventorySeed, onSeedConsumed]);
 
   const createRequest = async () => {
     if (!selected.length) return setStatus("Select at least one item to source.");

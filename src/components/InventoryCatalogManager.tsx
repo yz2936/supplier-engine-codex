@@ -22,9 +22,20 @@ type Recommendation = {
   source: "api" | "fallback_existing" | "fallback_default";
 };
 
+type SourceSeed = {
+  sku: string;
+  category: string;
+  grade: string;
+  thickness: number;
+  width: number;
+  length: number;
+  schedule?: string;
+  qtyOnHand: number;
+};
+
 type Props = {
   editable: boolean;
-  onSourceLine?: (sku: string) => void;
+  onSourceLine?: (seed: SourceSeed) => void;
 };
 
 export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
@@ -160,7 +171,17 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
 
   const sourceThisLine = (item: InventoryItem, qtyOnHand: number) => {
     if (qtyOnHand >= LOW_STOCK_THRESHOLD) return;
-    onSourceLine?.(item.sku);
+    onSourceLine?.({
+      sku: item.sku,
+      category: item.category,
+      grade: item.grade,
+      thickness: item.thickness,
+      width: item.width,
+      length: item.length,
+      schedule: item.schedule,
+      qtyOnHand
+    });
+    setMessage(`Queued ${item.sku} for sourcing.`);
   };
 
   const hasDraftChanges = (item: InventoryItem) =>

@@ -59,7 +59,16 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [inventoryCount, setInventoryCount] = useState<number>(0);
-  const [sourcingSeedSku, setSourcingSeedSku] = useState<string>("");
+  const [sourcingSeed, setSourcingSeed] = useState<{
+    sku: string;
+    category: string;
+    grade: string;
+    thickness: number;
+    width: number;
+    length: number;
+    schedule?: string;
+    qtyOnHand: number;
+  } | null>(null);
   const [buyerEmail, setBuyerEmail] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [draftSubject, setDraftSubject] = useState("Quotation");
@@ -749,8 +758,8 @@ export default function HomePage() {
               </div>
               <InventoryCatalogManager
                 editable={canUploadInventory(role)}
-                onSourceLine={(sku) => {
-                  setSourcingSeedSku(sku);
+                onSourceLine={(seed) => {
+                  setSourcingSeed(seed);
                   setActiveView("sourcing");
                 }}
               />
@@ -761,8 +770,8 @@ export default function HomePage() {
             <SourcingHub
               customerName={customerName}
               quoteLines={lines}
-              initialInventorySku={sourcingSeedSku}
-              onSeedConsumed={() => setSourcingSeedSku("")}
+              initialInventorySeed={sourcingSeed ?? undefined}
+              onSeedConsumed={() => setSourcingSeed(null)}
             />
           )}
 
