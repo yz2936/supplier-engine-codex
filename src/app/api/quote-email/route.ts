@@ -42,9 +42,10 @@ export async function POST(req: Request) {
     const text = draftQuoteText(customerName, lines, total, meta);
     const html = draftQuoteHtml(customerName, lines, total, meta);
     const fromAddress = cfg.from || auth.user.email;
-    const quotePdf = buildQuotePdf({ customerName, lines, total, meta });
+    const quoteId = crypto.randomUUID();
+    const quotePdf = buildQuotePdf({ quoteId, customerName, lines, total, meta });
     const safeCustomer = customerName.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "quote";
-    const pdfFileName = `Quotation_${safeCustomer}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    const pdfFileName = `Contract_Quote_${safeCustomer}_${new Date().toISOString().slice(0, 10)}.pdf`;
 
     await transporter.sendMail({
       from: fromAddress,
@@ -73,21 +74,33 @@ export async function POST(req: Request) {
         bodyText: text,
         fromEmail: fromAddress || auth.user.email,
         toEmail: buyerEmail,
-        receivedAt: new Date().toISOString()
+        receivedAt: new Date().toISOString(),
+        relatedQuoteId: quoteId,
+        attachments: [
+          {
+            filename: pdfFileName,
+            contentType: "application/pdf",
+            kind: "quote_contract_pdf"
+          }
+        ]
       });
       data.quotes.push({
-        id: crypto.randomUUID(),
+        id: quoteId,
         customerName,
         createdByUserId: auth.user.id,
         itemsQuoted: lines,
         totalPrice: total,
         status: "Sent",
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        sentToEmail: buyerEmail,
+        lastSentAt: new Date().toISOString(),
+        lastSentSubject: subject,
+        contractPdfFileName: pdfFileName
       });
       return null;
     });
 
-    return NextResponse.json({ ok: true, message: `Quote email sent to ${buyerEmail} with PDF attachment` });
+    return NextResponse.json({ ok: true, message: `Quote email sent to ${buyerEmail} with contract PDF attachment` });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to send quote email";
     const isAuthError = /535|badcredentials|auth/i.test(message);

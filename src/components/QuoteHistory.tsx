@@ -27,6 +27,7 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
           <tr>
             <th className="py-2 pr-3">Date</th>
             <th className="py-2 pr-3">Customer</th>
+            <th className="py-2 pr-3">Sent To</th>
             <th className="py-2 pr-3">Total</th>
             <th className="py-2 pr-3">Status</th>
           </tr>
@@ -36,6 +37,7 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
             <tr key={q.id}>
               <td className="py-2 pr-3">{new Date(q.createdAt).toLocaleString()}</td>
               <td className="py-2 pr-3">{q.customerName}</td>
+              <td className="py-2 pr-3">{q.sentToEmail || "-"}</td>
               <td className="py-2 pr-3">{money(q.totalPrice)}</td>
               <td className="py-2 pr-3">
                 <select
@@ -61,7 +63,7 @@ export function QuoteHistory({ enabled }: { enabled: boolean }) {
           ))}
           {!quotes.length && (
             <tr>
-              <td colSpan={4} className="py-3 text-steel-600">No quotes saved yet.</td>
+              <td colSpan={5} className="py-3 text-steel-600">No quotes saved yet.</td>
             </tr>
           )}
         </tbody>

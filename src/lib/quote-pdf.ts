@@ -100,15 +100,58 @@ const buildPdfBufferFromPages = (pages: string[][]) => {
 };
 
 export const buildQuotePdf = (params: {
+  quoteId?: string;
   customerName: string;
   lines: QuoteLine[];
   total: number;
   meta?: QuoteDraftMeta;
 }) => {
   const draftText = draftQuoteText(params.customerName, params.lines, params.total, params.meta);
+  const cfg = {
+    companyName: params.meta?.companyName || "Stainless Logic",
+    buyerName: params.meta?.buyerName || params.customerName,
+    eta: params.meta?.eta || "Earliest available",
+    incoterm: params.meta?.incoterm || "FOB Origin",
+    paymentTerms: params.meta?.paymentTerms || "Net 30",
+    freightTerms: params.meta?.freightTerms || "Packed for sea freight",
+    validDays: Number(params.meta?.validDays ?? 7),
+    senderName: params.meta?.senderName || "Sales Team",
+    senderTitle: params.meta?.senderTitle || "Inside Sales"
+  };
+  const quoteNo = params.quoteId || `Q-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
+  const lineSummary = params.lines.map((l, i) => {
+    return `${i + 1}. ${l.description} | ${l.quantity} ${l.unit} | ${l.unitPrice.toFixed(2)} | ${l.extendedPrice.toFixed(2)}`;
+  });
   const structuredLines = [
-    "STAINLESS LOGIC - QUOTATION",
+    `${cfg.companyName.toUpperCase()} - COMMERCIAL QUOTATION CONTRACT`,
     `Generated: ${new Date().toLocaleString()}`,
+    `Quote No: ${quoteNo}`,
+    "",
+    "PARTIES",
+    `Seller: ${cfg.companyName}`,
+    `Buyer: ${cfg.buyerName}`,
+    "",
+    "COMMERCIAL SCOPE",
+    ...lineSummary,
+    "",
+    "COMMERCIAL TERMS",
+    `Total Contract Price: ${params.total.toFixed(2)} USD`,
+    `ETA: ${cfg.eta}`,
+    `Incoterm: ${cfg.incoterm}`,
+    `Payment Terms: ${cfg.paymentTerms}`,
+    `Freight Terms: ${cfg.freightTerms}`,
+    `Quotation Validity: ${cfg.validDays} calendar days`,
+    "",
+    "CONDITIONS",
+    "- Material is subject to prior sale and mill confirmation.",
+    "- Buyer approval confirms dimensions, grade, and quantity.",
+    "- Any changes after approval may change lead time and pricing.",
+    "",
+    "SIGNATURE",
+    `Issued By: ${cfg.senderName} (${cfg.senderTitle})`,
+    "Buyer Acceptance Signature: ____________________________",
+    "",
+    "FULL QUOTE DRAFT",
     "",
     ...draftText.split("\n")
   ];

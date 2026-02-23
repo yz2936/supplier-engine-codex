@@ -67,6 +67,10 @@ export type Quote = {
   totalPrice: number;
   status: "Draft" | "Sent" | "Won";
   createdAt: string;
+  sentToEmail?: string;
+  lastSentAt?: string;
+  lastSentSubject?: string;
+  contractPdfFileName?: string;
 };
 
 export type Manufacturer = {
@@ -134,6 +138,12 @@ export type BuyerMessage = {
   fromEmail: string;
   toEmail: string;
   receivedAt: string;
+  relatedQuoteId?: string;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    kind: "quote_contract_pdf" | "other";
+  }>;
 };
 
 export type AppData = {
