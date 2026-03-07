@@ -1,4 +1,4 @@
-import { draftQuoteText, QuoteDraftMeta } from "@/lib/format";
+import { money, QuoteDraftMeta } from "@/lib/format";
 import { QuoteLine } from "@/lib/types";
 
 const escapePdfText = (s: string) =>
@@ -42,8 +42,8 @@ const buildContentStream = (pageLines: string[]) => {
   const textOps = pageLines.map((line, i) => `${i === 0 ? "" : "T* " }(${escapePdfText(line)}) Tj`).join("\n");
   return [
     "BT",
-    "/F1 10 Tf",
-    "14 TL",
+    "/F1 9 Tf",
+    "13 TL",
     "44 800 Td",
     textOps,
     "ET"
@@ -75,7 +75,7 @@ const buildPdfBufferFromPages = (pages: string[][]) => {
   const baseObjects: Array<{ id: number; body: string }> = [
     { id: 1, body: "<< /Type /Catalog /Pages 2 0 R >>" },
     { id: 2, body: `<< /Type /Pages /Count ${pageIds.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>` },
-    { id: 3, body: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>" }
+    { id: 3, body: "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>" }
   ];
 
   const all = [...baseObjects, ...objects].sort((a, b) => a.id - b.id);
@@ -106,36 +106,57 @@ export const buildQuotePdf = (params: {
   total: number;
   meta?: QuoteDraftMeta;
 }) => {
-  const draftText = draftQuoteText(params.customerName, params.lines, params.total, params.meta);
   const cfg = {
     companyName: params.meta?.companyName || "Stainless Logic",
     buyerName: params.meta?.buyerName || params.customerName,
+    subject: params.meta?.subject || `Quotation for ${params.customerName}`,
     eta: params.meta?.eta || "Earliest available",
     incoterm: params.meta?.incoterm || "FOB Origin",
     paymentTerms: params.meta?.paymentTerms || "Net 30",
     freightTerms: params.meta?.freightTerms || "Packed for sea freight",
     validDays: Number(params.meta?.validDays ?? 7),
     senderName: params.meta?.senderName || "Sales Team",
-    senderTitle: params.meta?.senderTitle || "Inside Sales"
+    senderTitle: params.meta?.senderTitle || "Inside Sales",
+    notes: params.meta?.notes || ""
   };
   const quoteNo = params.quoteId || `Q-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
-  const lineSummary = params.lines.map((l, i) => {
-    return `${i + 1}. ${l.description} | ${l.quantity} ${l.unit} | ${l.unitPrice.toFixed(2)} | ${l.extendedPrice.toFixed(2)}`;
+  const divider = "-".repeat(93);
+  const tableHeader = [
+    "#".padEnd(4),
+    "Item".padEnd(49),
+    "Qty".padEnd(12),
+    "Unit".padEnd(13),
+    "Ext".padEnd(13)
+  ].join("");
+  const tableLines = params.lines.flatMap((line, index) => {
+    const itemParts = wrapLine(line.description, 48);
+    return itemParts.map((part, partIndex) => [
+      partIndex === 0 ? String(index + 1).padEnd(4) : "".padEnd(4),
+      part.padEnd(49),
+      partIndex === 0 ? `${line.quantity} ${line.unit}`.padEnd(12) : "".padEnd(12),
+      partIndex === 0 ? money(line.unitPrice).padEnd(13) : "".padEnd(13),
+      partIndex === 0 ? money(line.extendedPrice).padEnd(13) : "".padEnd(13)
+    ].join(""));
   });
   const structuredLines = [
-    `${cfg.companyName.toUpperCase()} - COMMERCIAL QUOTATION CONTRACT`,
+    `${cfg.companyName.toUpperCase()} - COMMERCIAL QUOTATION`,
     `Generated: ${new Date().toLocaleString()}`,
     `Quote No: ${quoteNo}`,
+    `Subject: ${cfg.subject}`,
     "",
-    "PARTIES",
+    "CUSTOMER",
     `Seller: ${cfg.companyName}`,
     `Buyer: ${cfg.buyerName}`,
     "",
-    "COMMERCIAL SCOPE",
-    ...lineSummary,
+    "LINE ITEMS",
+    divider,
+    tableHeader,
+    divider,
+    ...tableLines,
+    divider,
+    `${"".padEnd(65)}Total: ${money(params.total)}`,
     "",
     "COMMERCIAL TERMS",
-    `Total Contract Price: ${params.total.toFixed(2)} USD`,
     `ETA: ${cfg.eta}`,
     `Incoterm: ${cfg.incoterm}`,
     `Payment Terms: ${cfg.paymentTerms}`,
@@ -146,14 +167,11 @@ export const buildQuotePdf = (params: {
     "- Material is subject to prior sale and mill confirmation.",
     "- Buyer approval confirms dimensions, grade, and quantity.",
     "- Any changes after approval may change lead time and pricing.",
+    ...(cfg.notes ? ["", "ADDITIONAL NOTES", ...wrapLine(cfg.notes, 88)] : []),
     "",
     "SIGNATURE",
     `Issued By: ${cfg.senderName} (${cfg.senderTitle})`,
-    "Buyer Acceptance Signature: ____________________________",
-    "",
-    "FULL QUOTE DRAFT",
-    "",
-    ...draftText.split("\n")
+    "Buyer Acceptance Signature: ____________________________"
   ];
   return buildPdfBufferFromPages(buildPages(structuredLines));
 };

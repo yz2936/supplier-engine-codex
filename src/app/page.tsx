@@ -12,6 +12,7 @@ import { ResultsTable } from "@/components/ResultsTable";
 import { SourcingHub } from "@/components/SourcingHub";
 import { canGenerateQuotes, canUploadInventory, roleLabel } from "@/lib/auth";
 import { draftQuoteText, money } from "@/lib/format";
+import { extractTextFromRfqFile, RFQ_FILE_ACCEPT } from "@/lib/rfq-file";
 import { QuoteLine, UserRole } from "@/lib/types";
 import { LlmProvider } from "@/lib/llm-provider";
 
@@ -55,6 +56,9 @@ export default function HomePage() {
   const [rfqText, setRfqText] = useState(defaultRFQ);
   const [marginPercent, setMarginPercent] = useState(12);
   const [autoParse, setAutoParse] = useState(true);
+  const [rfqSourceFiles, setRfqSourceFiles] = useState<Array<{ name: string; kind: string }>>([]);
+  const [rfqFileBusy, setRfqFileBusy] = useState(false);
+  const [rfqFileStatus, setRfqFileStatus] = useState("");
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [total, setTotal] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -334,6 +338,38 @@ export default function HomePage() {
     const json = await res.json();
     return { ok: false as const, message: json.error || "Failed to save quote" };
   }, [customerName, lines, total]);
+
+  const loadRfqFiles = useCallback(async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    setRfqFileBusy(true);
+    setRfqFileStatus("Loading intake files...");
+    try {
+      const files = Array.from(fileList);
+      const extracted = await Promise.all(files.map(async (file) => {
+        const result = await extractTextFromRfqFile(file);
+        return {
+          name: file.name,
+          kind: result.kind,
+          text: result.text
+        };
+      }));
+
+      const appendedText = extracted
+        .map((entry) => `[Source File: ${entry.name}]\n${entry.text}`)
+        .join("\n\n");
+
+      setRfqText((prev) => [prev.trim(), appendedText].filter(Boolean).join("\n\n"));
+      setRfqSourceFiles((prev) => [
+        ...prev,
+        ...extracted.map((entry) => ({ name: entry.name, kind: entry.kind }))
+      ]);
+      setRfqFileStatus(`Loaded ${extracted.length} intake file${extracted.length === 1 ? "" : "s"} into the RFQ workspace.`);
+    } catch (err) {
+      setRfqFileStatus(err instanceof Error ? err.message : "Failed to load one or more intake files.");
+    } finally {
+      setRfqFileBusy(false);
+    }
+  }, []);
 
   const uploadInventoryFile = useCallback(async (file: File) => {
     const form = new FormData();
@@ -733,6 +769,39 @@ export default function HomePage() {
                           <div className="mt-1 text-sm font-semibold text-steel-900">{activeSourceLabel}</div>
                           <div className="text-sm text-steel-600">{activeSourceEmail}</div>
                         </div>
+                        <div className="mt-3 rounded-2xl border border-dashed border-steel-300 bg-white/75 p-4">
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                              <div className="section-title">Upload source files</div>
+                              <div className="mt-1 text-sm font-semibold text-steel-900">Load PDF, Excel, Word, email, or text files into intake</div>
+                              <div className="text-xs text-steel-600">Supported: PDF, XLSX, XLS, CSV, DOC, DOCX, TXT, MD, EML, RTF, JSON, XML.</div>
+                            </div>
+                            <label className="btn-secondary cursor-pointer text-center">
+                              {rfqFileBusy ? "Loading..." : "Add Intake Files"}
+                              <input
+                                type="file"
+                                multiple
+                                accept={RFQ_FILE_ACCEPT}
+                                className="hidden"
+                                disabled={rfqFileBusy}
+                                onChange={(e) => {
+                                  void loadRfqFiles(e.target.files);
+                                  e.currentTarget.value = "";
+                                }}
+                              />
+                            </label>
+                          </div>
+                          {!!rfqSourceFiles.length && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {rfqSourceFiles.map((file) => (
+                                <div key={`${file.name}-${file.kind}`} className="rounded-full border border-steel-200 bg-steel-50 px-3 py-1 text-xs text-steel-700">
+                                  {file.name} · {file.kind}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {rfqFileStatus && <div className="mt-3 text-xs text-steel-600">{rfqFileStatus}</div>}
+                        </div>
                         <textarea
                           className="input mt-3 min-h-[220px] font-mono text-xs md:min-h-[260px]"
                           value={rfqText}
@@ -792,6 +861,8 @@ export default function HomePage() {
                               setTotal(0);
                               setError("");
                               setSendStatus("");
+                              setRfqSourceFiles([]);
+                              setRfqFileStatus("");
                             }}
                           >
                             Clear
