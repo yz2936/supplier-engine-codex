@@ -56,6 +56,16 @@ export const detectCategory = (line: string) => {
   return "Unknown";
 };
 
+export const categoryFamily = (category: string) => {
+  const lower = category.toLowerCase();
+  if (/(valve|strainer)/.test(lower)) return "valve";
+  if (/(flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|fitting|gasket)/.test(lower)) return "fitting";
+  if (/(pipe|tube|tubing)/.test(lower)) return "tube";
+  if (/(sheet|plate|coil)/.test(lower)) return "flat";
+  if (/(bar|angle|channel)/.test(lower)) return "long";
+  return lower;
+};
+
 export const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
 export const calcWeightFromGeometry = (thickness: number, width: number, length: number, quantity: number) =>

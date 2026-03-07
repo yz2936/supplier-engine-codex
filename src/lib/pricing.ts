@@ -1,5 +1,6 @@
 import { MatchResult, QuoteLine, Surcharge } from "@/lib/types";
 import { clamp, monthYear } from "@/lib/utils";
+import { describeRequestedItem, formatInches } from "@/lib/format";
 
 const gradeSurcharge = (grade: string, surcharges: Surcharge[]) => {
   const key = monthYear();
@@ -29,8 +30,15 @@ export const buildQuoteLines = (
     const extendedPrice = unitPrice * qty;
 
     const description = inv
-      ? `${inv.sku} | ${inv.grade} ${inv.category} ${inv.thickness} x ${inv.width} x ${inv.length} ${inv.finish}${inv.schedule ? ` SCH ${inv.schedule}` : ""}`
-      : `${m.requested.category} ${m.requested.grade} ${m.requested.dimensionSummary || m.requested.rawSpec}`.trim();
+      ? [
+        inv.sku,
+        `${inv.grade} ${inv.category}`.trim(),
+        [formatInches(inv.thickness), formatInches(inv.width), formatInches(inv.length)].filter(Boolean).join(" x "),
+        inv.finish,
+        inv.schedule ? `SCH ${inv.schedule}` : undefined,
+        inv.specText
+      ].filter(Boolean).join(" | ")
+      : describeRequestedItem(m.requested) || m.requested.rawSpec;
 
     return {
       requested: m.requested,

@@ -539,19 +539,19 @@ export default function HomePage() {
 
   const layoutClass = chatOpen
     ? (sidebarCollapsed
-      ? "grid grid-cols-1 gap-4 lg:grid-cols-[92px_minmax(0,1fr)] xl:grid-cols-[92px_minmax(0,1fr)_390px]"
-      : "grid grid-cols-1 gap-4 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_390px]")
+      ? "grid grid-cols-1 gap-4 lg:grid-cols-[76px_minmax(0,1fr)] xl:grid-cols-[76px_minmax(0,1fr)_390px]"
+      : "grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_390px]")
     : (sidebarCollapsed
-      ? "grid grid-cols-1 gap-4 lg:grid-cols-[92px_minmax(0,1fr)]"
-      : "grid grid-cols-1 gap-4 lg:grid-cols-[270px_minmax(0,1fr)]");
+      ? "grid grid-cols-1 gap-4 lg:grid-cols-[76px_minmax(0,1fr)]"
+      : "grid grid-cols-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]");
 
   return (
     <main className="app-shell mx-auto min-h-screen max-w-[1780px] p-4 md:p-5">
       <div className={layoutClass}>
-        <aside className="h-fit space-y-3 border-r border-[#10254f] bg-[#0b1a48] p-3 text-white lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
+        <aside className="h-fit space-y-3 border-r border-[#10254f] bg-[#0b1a48] p-2.5 text-white lg:sticky lg:top-4 lg:flex lg:h-[calc(100vh-2rem)] lg:flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-lg text-white shadow-[0_10px_24px_rgba(242,104,9,0.35)]">⌘</div>
               <div className={`space-y-0.5 ${sidebarCollapsed ? "hidden lg:hidden" : ""}`}>
                 <h1 className="font-['Sora'] text-xl font-semibold text-white">Stainless Logic</h1>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-white/70">Procurement OS</p>
@@ -597,8 +597,8 @@ export default function HomePage() {
                 onClick={() => setActiveView(v)}
                 className={
                   activeView === v
-                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-orange-400 bg-white/15 px-3 py-2 text-left text-sm font-medium text-white`
-                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-transparent px-3 py-2 text-left text-sm text-white/85 transition hover:border-orange-300 hover:bg-white/10`
+                    ? `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-orange-400 bg-white/15 px-2.5 py-2 text-left text-sm font-medium text-white`
+                    : `flex w-full items-center ${sidebarCollapsed ? "justify-center" : "justify-between"} border-l-2 border-transparent px-2.5 py-2 text-left text-sm text-white/85 transition hover:border-orange-300 hover:bg-white/10`
                 }
                 title={sidebarCollapsed ? viewMeta[v].label : undefined}
               >
@@ -684,125 +684,142 @@ export default function HomePage() {
 
           {activeView === "workspace" && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.9fr)]">
-                <section className="panel panel-aurora space-y-4">
-                  <div className="flex flex-col gap-3 border-b border-steel-200/80 pb-4 md:flex-row md:items-start md:justify-between">
-                    <div className="space-y-1">
-                      <div className="section-title">Workspace</div>
-                      <div className="text-xl font-semibold text-steel-950">RFP intake and pricing</div>
-                      <p className="max-w-2xl text-sm text-steel-600">
-                        Keep the source email visible, adjust margin inline, and review priced line items without leaving the intake panel.
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm md:min-w-[280px]">
-                      <div className="kpi-card">
-                        <div className="section-title">Total</div>
-                        <div className="mt-1 text-xl font-bold text-teal-800">{money(total)}</div>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_330px]">
+                <section className="space-y-4">
+                  <div className="panel panel-aurora space-y-4">
+                    <div className="flex flex-col gap-3 border-b border-steel-200/80 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="space-y-1">
+                        <div className="section-title">Workspace</div>
+                        <div className="text-xl font-semibold text-steel-950">Guided RFP workflow</div>
+                        <p className="max-w-2xl text-sm text-steel-600">
+                          Work left to right: confirm the source, parse and review the technical lines, then send the quote.
+                        </p>
                       </div>
-                      <div className="kpi-card">
-                        <div className="section-title">Lines</div>
-                        <div className="mt-1 text-xl font-bold text-steel-900">{lines.length}</div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="neo-chip">1. Source</span>
+                        <span className="neo-chip">2. Review</span>
+                        <span className="neo-chip">3. Deliver</span>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <input className="input" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
-                        <input className="input" placeholder="Buyer name" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
-                      </div>
-                      <div className="rounded-2xl border border-orange-200/70 bg-orange-50/70 p-3">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                      <div className="rounded-2xl border border-orange-200/70 bg-orange-50/70 p-4">
+                        <div className="mb-3 flex items-center gap-3">
+                          <span className="step-badge">Step 1</span>
                           <div>
-                            <div className="section-title">Parsed source</div>
-                            <div className="mt-1 text-sm font-semibold text-steel-900">{activeSourceLabel}</div>
-                            <div className="text-sm text-steel-600">{activeSourceEmail}</div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                            <div className="rounded-xl border border-emerald-200 bg-white/80 px-2 py-2">
-                              <div className="font-semibold text-emerald-700">{stockSummary.green}</div>
-                              <div className="text-steel-500">In stock</div>
-                            </div>
-                            <div className="rounded-xl border border-amber-200 bg-white/80 px-2 py-2">
-                              <div className="font-semibold text-amber-700">{stockSummary.yellow}</div>
-                              <div className="text-steel-500">Partial</div>
-                            </div>
-                            <div className="rounded-xl border border-rose-200 bg-white/80 px-2 py-2">
-                              <div className="font-semibold text-rose-700">{stockSummary.red}</div>
-                              <div className="text-steel-500">Source</div>
-                            </div>
+                            <div className="text-sm font-semibold text-steel-900">Confirm request source</div>
+                            <div className="text-xs text-steel-600">Make sure the buyer and source email are correct before parsing.</div>
                           </div>
                         </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <input className="input" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
+                          <input className="input" placeholder="Buyer name" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
+                          <input className="input md:col-span-2" placeholder="Buyer email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
+                        </div>
+                        <div className="mt-3 rounded-2xl border border-white/80 bg-white/75 p-3">
+                          <div className="section-title">Active source</div>
+                          <div className="mt-1 text-sm font-semibold text-steel-900">{activeSourceLabel}</div>
+                          <div className="text-sm text-steel-600">{activeSourceEmail}</div>
+                        </div>
+                        <textarea
+                          className="input mt-3 min-h-[220px] font-mono text-xs md:min-h-[260px]"
+                          value={rfqText}
+                          onChange={(e) => setRfqText(e.target.value)}
+                          placeholder="Paste the RFP or inbound buyer request here"
+                        />
                       </div>
-                      <textarea
-                        className="input min-h-[220px] font-mono text-xs md:min-h-[280px]"
-                        value={rfqText}
-                        onChange={(e) => setRfqText(e.target.value)}
-                        placeholder="Paste the RFP or inbound buyer request here"
-                      />
-                    </div>
 
-                    <div className="space-y-3 rounded-2xl border border-steel-200/80 bg-white/70 p-3">
-                      <div>
-                        <div className="section-title">Pricing control</div>
-                        <div className="mt-1 text-sm text-steel-600">Margin is applied directly during parse and match.</div>
-                      </div>
-                      <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3">
-                        <div className="flex items-center justify-between text-sm font-medium text-steel-800">
-                          <span>Margin</span>
-                          <span>{marginPercent}%</span>
+                      <div className="space-y-3 rounded-2xl border border-steel-200/80 bg-white/75 p-4">
+                        <div className="mb-1 flex items-center gap-3">
+                          <span className="step-badge">Step 2</span>
+                          <div>
+                            <div className="text-sm font-semibold text-steel-900">Parse and price</div>
+                            <div className="text-xs text-steel-600">Apply margin, generate line items, and validate stock coverage.</div>
+                          </div>
                         </div>
-                        <input type="range" min={0} max={40} value={marginPercent} className="mt-3 w-full" onChange={(e) => setMarginPercent(Number(e.target.value))} disabled={!canGenerateQuotes(role)} />
+                        <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3">
+                          <div className="flex items-center justify-between text-sm font-medium text-steel-800">
+                            <span>Margin</span>
+                            <span>{marginPercent}%</span>
+                          </div>
+                          <input type="range" min={0} max={40} value={marginPercent} className="mt-3 w-full" onChange={(e) => setMarginPercent(Number(e.target.value))} disabled={!canGenerateQuotes(role)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="kpi-card">
+                            <div className="section-title">Lines</div>
+                            <div className="mt-1 text-xl font-bold text-steel-900">{lines.length}</div>
+                          </div>
+                          <div className="kpi-card">
+                            <div className="section-title">Total</div>
+                            <div className="mt-1 text-xl font-bold text-teal-800">{money(total)}</div>
+                          </div>
+                          <div className="kpi-card">
+                            <div className="section-title">In stock</div>
+                            <div className="mt-1 text-xl font-bold text-emerald-700">{stockSummary.green}</div>
+                          </div>
+                          <div className="kpi-card">
+                            <div className="section-title">Need source</div>
+                            <div className="mt-1 text-xl font-bold text-rose-700">{stockSummary.red}</div>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button className="btn" onClick={parseAndPrice} disabled={!canGenerateQuotes(role) || busy}>{busy ? "Parsing..." : "Parse + Price"}</button>
+                          <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
+                            {autoParse ? "Auto-Parse On" : "Auto-Parse Off"}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="btn-secondary"
+                            onClick={() => {
+                              setCustomerName("");
+                              setRfqText("");
+                              setBuyerEmail("");
+                              setBuyerName("");
+                              setLines([]);
+                              setTotal(0);
+                              setError("");
+                              setSendStatus("");
+                            }}
+                          >
+                            Clear
+                          </button>
+                          <button className="btn-secondary" onClick={async () => navigator.clipboard.writeText(draft)} disabled={!lines.length}>Copy Draft</button>
+                          <button
+                            className="btn-secondary"
+                            disabled={!lines.length || !canGenerateQuotes(role)}
+                            onClick={async () => {
+                              const result = await saveQuote();
+                              if (result.ok) alert(result.message);
+                            }}
+                          >
+                            Save Quote
+                          </button>
+                        </div>
+                        {error && <p className="text-sm text-rose-600">{error}</p>}
                       </div>
-                      <input className="input" placeholder="Buyer email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
-                      <div className="flex flex-wrap gap-2">
-                        <button className="btn" onClick={parseAndPrice} disabled={!canGenerateQuotes(role) || busy}>{busy ? "Parsing..." : "Parse + Price"}</button>
-                        <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
-                          {autoParse ? "Auto-Parse On" : "Auto-Parse Off"}
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          className="btn-secondary"
-                          onClick={() => {
-                            setCustomerName("");
-                            setRfqText("");
-                            setBuyerEmail("");
-                            setBuyerName("");
-                            setLines([]);
-                            setTotal(0);
-                            setError("");
-                            setSendStatus("");
-                          }}
-                        >
-                          Clear
-                        </button>
-                        <button className="btn-secondary" onClick={async () => navigator.clipboard.writeText(draft)} disabled={!lines.length}>Copy Draft</button>
-                        <button
-                          className="btn-secondary"
-                          disabled={!lines.length || !canGenerateQuotes(role)}
-                          onClick={async () => {
-                            const result = await saveQuote();
-                            if (result.ok) alert(result.message);
-                          }}
-                        >
-                          Save Quote
-                        </button>
-                      </div>
-                      {error && <p className="text-sm text-rose-600">{error}</p>}
                     </div>
                   </div>
 
-                  <div className="border-t border-steel-200/80 pt-4">
+                  <div className="panel space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="step-badge">Step 2</span>
+                      <div>
+                        <div className="text-sm font-semibold text-steel-900">Review parsed technical lines</div>
+                        <div className="text-xs text-steel-600">Focus on category, pressure class, end prep, standards, and dimensions before sending.</div>
+                      </div>
+                    </div>
                     <ResultsTable lines={lines} />
                   </div>
                 </section>
 
                 <section className="panel space-y-4">
-                  <div className="border-b border-steel-200/80 pb-4">
-                    <div className="section-title">Quote delivery</div>
-                    <div className="mt-1 text-lg font-semibold text-steel-950">Buyer-ready email and draft</div>
+                  <div className="flex items-center gap-3 border-b border-steel-200/80 pb-4">
+                    <span className="step-badge">Step 3</span>
+                    <div>
+                      <div className="text-lg font-semibold text-steel-950">Deliver quote</div>
+                      <div className="text-xs text-steel-600">Once the line items look right, finalize the buyer email and send.</div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-2">
@@ -819,6 +836,15 @@ export default function HomePage() {
 
                   <input className="input" placeholder="Freight terms" value={draftFreightTerms} onChange={(e) => setDraftFreightTerms(e.target.value)} />
                   <textarea className="input min-h-16" placeholder="Additional notes" value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} />
+
+                  <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3 text-sm">
+                    <div className="section-title">Send checklist</div>
+                    <div className="mt-2 space-y-1 text-steel-700">
+                      <div>{buyerEmail ? "Buyer email ready" : "Buyer email missing"}</div>
+                      <div>{lines.length ? `${lines.length} priced line items ready` : "No priced line items yet"}</div>
+                      <div>{total > 0 ? `Quote total ${money(total)}` : "Quote total pending"}</div>
+                    </div>
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     <button className="btn-secondary" disabled={!lines.length} onClick={async () => navigator.clipboard.writeText(draft)}>Copy Updated Draft</button>

@@ -1,5 +1,5 @@
 import { ExtractedLineItem, InventoryItem, MatchResult } from "@/lib/types";
-import { dualCertifiedMatch, overlapScore } from "@/lib/utils";
+import { categoryFamily, dualCertifiedMatch, overlapScore } from "@/lib/utils";
 
 const dimScore = (requested?: number, candidate?: number, tolerance = 0.02) => {
   if (!requested || !candidate) return 0.4;
@@ -10,6 +10,7 @@ const dimScore = (requested?: number, candidate?: number, tolerance = 0.02) => {
 const scoreItem = (req: ExtractedLineItem, inv: InventoryItem) => {
   let score = 0;
   if (req.category.toLowerCase() === inv.category.toLowerCase()) score += 2;
+  else if (categoryFamily(req.category) === categoryFamily(inv.category)) score += 1.25;
   if (dualCertifiedMatch(req.grade, inv.grade)) score += 2;
   if (req.finish && req.finish.toLowerCase() === inv.finish.toLowerCase()) score += 1;
   score += dimScore(req.thickness, inv.thickness, 0.01);

@@ -1,4 +1,4 @@
-import { QuoteLine } from "@/lib/types";
+import { ExtractedLineItem, QuoteLine } from "@/lib/types";
 
 export const money = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
@@ -8,6 +8,40 @@ export const stockLabel = (status: "green" | "yellow" | "red") =>
 
 export const stockColor = (status: "green" | "yellow" | "red") =>
   status === "green" ? "bg-emerald-500" : status === "yellow" ? "bg-amber-400" : "bg-rose-500";
+
+export const formatInches = (n?: number) => (
+  Number.isFinite(n) ? `${Number(n).toFixed(3).replace(/\.?0+$/, "")} in` : undefined
+);
+
+export const summarizeRequestedSpecs = (item: ExtractedLineItem) => {
+  const specs = [
+    item.dimensionSummary,
+    item.nominalSize ? `NPS ${item.nominalSize}` : undefined,
+    item.schedule ? `SCH ${item.schedule}` : undefined,
+    item.pressureClass,
+    item.od ? `OD ${formatInches(item.od)}` : undefined,
+    item.id ? `ID ${formatInches(item.id)}` : undefined,
+    item.wall ? `Wall ${formatInches(item.wall)}` : undefined,
+    item.angle ? `${item.angle}°` : undefined,
+    item.radius,
+    item.endType,
+    item.endTypeSecondary,
+    item.face,
+    item.finish,
+    item.notes
+  ].filter(Boolean) as string[];
+
+  return Array.from(new Set(specs));
+};
+
+export const standardsLabel = (item: ExtractedLineItem) =>
+  item.standards?.length ? item.standards.join(", ") : undefined;
+
+export const describeRequestedItem = (item: ExtractedLineItem) => {
+  const head = [item.grade, item.category].filter(Boolean).join(" ").trim();
+  const detail = summarizeRequestedSpecs(item).join(" | ");
+  return [head, detail].filter(Boolean).join(" | ");
+};
 
 export type QuoteDraftMeta = {
   buyerName?: string;

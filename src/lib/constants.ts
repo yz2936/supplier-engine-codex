@@ -12,6 +12,26 @@ export const GAUGE_TO_DECIMAL: Record<string, number> = {
 };
 
 export const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  Valve: ["valve", "ball valve", "gate valve", "globe valve", "check valve", "butterfly valve", "needle valve", "plug valve", "control valve"],
+  Flange: ["flange", "wnrf", "welding neck", "slip on", "socket weld flange", "blind flange", "lap joint", "rtj flange", "sorf", "wn"],
+  Elbow: ["elbow", "45deg", "90deg", "180deg", "long radius elbow", "short radius elbow", "lr elbow", "sr elbow"],
+  Tee: ["tee", "equal tee", "reducing tee", "lateral tee"],
+  Reducer: ["reducer", "concentric", "eccentric"],
+  Cap: ["cap", "end cap"],
+  Coupling: ["coupling", "half coupling", "full coupling"],
+  Union: ["union"],
+  Nipple: ["nipple", "swage nipple", "hex nipple"],
+  Olet: ["olet", "weldolet", "sockolet", "threadolet", "latrolet", "elbolet"],
+  Gasket: ["gasket", "spiral wound", "ring gasket"],
+  Strainer: ["strainer", "y strainer", "basket strainer"],
+  "Buttweld Fitting": ["buttweld", "bw fitting", "butt weld"],
+  "Socket Weld Fitting": ["socket weld", "sw fitting"],
+  "Threaded Fitting": ["threaded fitting", "npt", "bsp", "fnpt", "mnpt"],
+  "Sanitary Fitting": ["tri clamp", "triclover", "sanitary fitting", "clamp end"],
+  Pipe: ["pipe", "schedule", "seamless pipe", "welded pipe", "sanitary pipe"],
+  Tube: ["tube", "tubing"],
+  "Structural Tubing": ["structural tubing", "hss"],
+  "Ornamental Tubing": ["ornamental tubing", "ot"],
   Sheet: ["sheet", "sht", "flat rolled"],
   Plate: ["plate", "plt"],
   Coil: ["coil"],
@@ -21,8 +41,5 @@ export const CATEGORY_KEYWORDS: Record<string, string[]> = {
   "Square Bar": ["square bar"],
   Angles: ["angle"],
   Channels: ["channel"],
-  "Ornamental Tubing": ["ornamental tubing", "ot"],
-  "Structural Tubing": ["structural tubing", "hss"],
-  Pipe: ["pipe", "schedule", "sanitary"],
-  Fittings: ["fitting", "elbow", "tee", "reducer"]
+  Fittings: ["fitting"]
 };

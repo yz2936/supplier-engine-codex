@@ -9,10 +9,21 @@ const lineItemSchema = z.object({
   finish: z.string().optional(),
   nominalSize: z.coerce.number().optional(),
   schedule: z.string().optional(),
+  pressureClass: z.string().optional(),
+  endType: z.string().optional(),
+  endTypeSecondary: z.string().optional(),
+  face: z.string().optional(),
+  standards: z.array(z.string()).optional(),
   dimensionSummary: z.string().optional(),
   thickness: z.coerce.number().optional(),
   width: z.coerce.number().optional(),
   length: z.coerce.number().optional(),
+  od: z.coerce.number().optional(),
+  id: z.coerce.number().optional(),
+  wall: z.coerce.number().optional(),
+  angle: z.coerce.number().optional(),
+  radius: z.string().optional(),
+  notes: z.string().optional(),
   quantity: z.coerce.number(),
   quantityUnit: z.preprocess((v) => String(v ?? "").toLowerCase(), z.enum(["pcs", "lbs"])),
   rawSpec: z.string(),
@@ -23,6 +34,7 @@ const responseSchema = z.array(lineItemSchema);
 
 const finishPattern = /\b(2B|#4|BA|HRAP)\b/i;
 const dimsPattern = /(\d+(?:\.\d+)?(?:\/\d+)?(?:\s?(?:ga|mm|cm|m|in|"))?)\s*[x×]\s*(\d+(?:\.\d+)?(?:\/\d+)?(?:\s?(?:mm|cm|m|in|"))?)\s*[x×]\s*(\d+(?:\.\d+)?(?:\/\d+)?(?:\s?(?:mm|cm|m|in|"))?)/i;
+const twoDimsPattern = /(\d+(?:\.\d+)?(?:\/\d+)?(?:\s?(?:ga|mm|cm|m|in|"))?)\s*[x×]\s*(\d+(?:\.\d+)?(?:\/\d+)?(?:\s?(?:mm|cm|m|in|"))?)/i;
 
 const nbMap: Record<string, number> = {
   "8": 0.25,
@@ -124,6 +136,58 @@ const parseSchedule = (text: string) => {
   return hit ? hit.toUpperCase() : undefined;
 };
 
+const parsePressureClass = (text: string) => {
+  const hit = text.match(/\b(?:class|cl)\s*[-:]?\s*(\d{2,4})\b/i)?.[1];
+  return hit ? `CL ${hit}` : undefined;
+};
+
+const parseFace = (text: string) => {
+  const hit = text.match(/\b(rf|ff|rtj|tg|mf)\b/i)?.[1];
+  return hit ? hit.toUpperCase() : undefined;
+};
+
+const parseAngle = (text: string) => {
+  const hit = text.match(/\b(45|90|180)\s*(?:deg|degree)?\b/i)?.[1];
+  return hit ? Number(hit) : undefined;
+};
+
+const parseRadius = (text: string) => {
+  if (/\blong radius|\blr\b/i.test(text)) return "LR";
+  if (/\bshort radius|\bsr\b/i.test(text)) return "SR";
+  return undefined;
+};
+
+const parseStandards = (text: string) => {
+  const matches = text.match(/\b(?:ASTM|ASME|AISI|API|MSS|DIN|EN|ISO|JIS|BS)\s*[A-Z0-9-]+\b/gi) ?? [];
+  return Array.from(new Set(matches.map((m) => m.toUpperCase().replace(/\s+/g, " ").trim())));
+};
+
+const parseEndTypes = (text: string) => {
+  const normalized = text.toLowerCase();
+  const found: string[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/\b(bw|butt weld|buttweld|bevel end|be)\b/i, "BW"],
+    [/\b(sw|socket weld|socketweld)\b/i, "SW"],
+    [/\b(threaded|thread|npt|bsp|fnpt|mnpt|screwed)\b/i, "THD"],
+    [/\b(flanged|flange end)\b/i, "FLG"],
+    [/\b(plain end|pe)\b/i, "PE"],
+    [/\b(grooved)\b/i, "GRV"],
+    [/\b(tri clamp|clamp end|sanitary clamp)\b/i, "CLAMP"]
+  ];
+  for (const [pattern, label] of patterns) {
+    if (pattern.test(normalized) && !found.includes(label)) found.push(label);
+  }
+  return { endType: found[0], endTypeSecondary: found[1] };
+};
+
+const parseDiameterLike = (text: string, labels: string[]) => {
+  for (const label of labels) {
+    const match = text.match(new RegExp(`\\b${label}\\s*[:=]?\\s*([\\d./]+\\s*(?:mm|cm|m|in|\"))`, "i"))?.[1];
+    if (match) return parseMeasurementInches(match);
+  }
+  return undefined;
+};
+
 const inferBlocks = (text: string) => {
   const lines = cleanInput(text).split("\n").map((l) => l.trim()).filter(Boolean);
   const blocks: string[] = [];
@@ -138,7 +202,7 @@ const inferBlocks = (text: string) => {
       current = [];
     }
 
-    if (!isNoise || /\b(size|qty|length|schedule|grade|pipe|sheet|plate|bar|tube|tubing)\b/i.test(line)) {
+    if (!isNoise || /\b(size|qty|length|schedule|grade|pipe|tube|tubing|valve|flange|elbow|tee|reducer|fitting|class|npt|bw|sw)\b/i.test(line)) {
       current.push(line);
     }
   }
@@ -153,13 +217,13 @@ const inferBlocks = (text: string) => {
 };
 
 const hasItemSignal = (line: string) =>
-  /(pipe|sheet|plate|bar|tube|tubing|coil|fitting|angle|channel|sch\s*\d+|schedule\s*\d+|\d+\s*nb|\d+ga|x|qty|grade|stainless)/i.test(line);
+  /(pipe|tube|tubing|valve|flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|gasket|strainer|sheet|plate|bar|coil|fitting|angle|channel|sch\s*\d+|schedule\s*\d+|\bclass\s*\d+\b|\bcl\s*\d+\b|\d+\s*nb|\d+ga|x|qty|grade|stainless)/i.test(line);
 
 const hasProductCategorySignal = (line: string) =>
-  /(pipe|tube|tubing|sheet|plate|coil|bar|rod|angle|channel|fitting|elbow|tee|reducer|stainless)/i.test(line);
+  /(pipe|tube|tubing|valve|flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|gasket|strainer|sheet|plate|coil|bar|rod|angle|channel|fitting|stainless)/i.test(line);
 
 const hasDimensionSignal = (line: string) =>
-  /(\d+\s*[x×]\s*\d+|\d+ga|\d+\s*nb|sch(?:edule)?\s*\d+|length\s*[:=]?\s*\d|\d+\s*(mm|cm|m|in|"))/i.test(line);
+  /(\d+\s*[x×]\s*\d+|\d+ga|\d+\s*nb|sch(?:edule)?\s*\d+|\bclass\s*\d+\b|\bcl\s*\d+\b|\bod\b|\bid\b|\bwall\b|length\s*[:=]?\s*\d|\d+\s*(mm|cm|m|in|"))/i.test(line);
 
 const buildDimensionSummary = (
   category: string,
@@ -173,6 +237,23 @@ const buildDimensionSummary = (
       attrs.nominalSize ? `NPS/NB ${attrs.nominalSize}` : undefined,
       attrs.schedule ? `SCH ${attrs.schedule}` : undefined,
       attrs.thickness ? `WT ${fmt(attrs.thickness)} in` : undefined,
+      attrs.length ? `L ${fmt(attrs.length)} in` : undefined
+    ].filter(Boolean);
+    return parts.join(" | ");
+  }
+
+  if (/valve|strainer/.test(c)) {
+    const parts = [
+      attrs.nominalSize ? `NPS ${fmt(attrs.nominalSize)}` : undefined,
+      attrs.schedule ? `SCH ${attrs.schedule}` : undefined
+    ].filter(Boolean);
+    return parts.join(" | ");
+  }
+
+  if (/flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|fitting|gasket/.test(c)) {
+    const parts = [
+      attrs.nominalSize ? `NPS ${fmt(attrs.nominalSize)}` : undefined,
+      attrs.schedule ? `SCH ${attrs.schedule}` : undefined,
       attrs.length ? `L ${fmt(attrs.length)} in` : undefined
     ].filter(Boolean);
     return parts.join(" | ");
@@ -218,10 +299,19 @@ const parseBlock = (block: string): ExtractedLineItem => {
   const quantity = parseQuantity(block);
   const schedule = parseSchedule(block);
   const nominalSize = parseNominalSize(block);
+  const pressureClass = parsePressureClass(block);
+  const face = parseFace(block);
+  const angle = parseAngle(block);
+  const radius = parseRadius(block);
+  const standards = parseStandards(block);
+  const { endType, endTypeSecondary } = parseEndTypes(block);
 
   let thickness: number | undefined;
   let width: number | undefined;
   let length: number | undefined;
+  let od = parseDiameterLike(block, ["od", "outside diameter"]);
+  let id = parseDiameterLike(block, ["id", "inside diameter"]);
+  let wall = parseDiameterLike(block, ["wall", "wall thickness", "wt"]);
 
   const dims = block.match(dimsPattern);
   if (dims) {
@@ -230,12 +320,28 @@ const parseBlock = (block: string): ExtractedLineItem => {
     length = parseMeasurementInches(dims[3]);
   }
 
+  if (!thickness || !width) {
+    const dims2 = block.match(twoDimsPattern);
+    if (dims2) {
+      thickness = thickness ?? parseGaugeOrThickness(dims2[1]) ?? parseMeasurementInches(dims2[1]);
+      width = width ?? parseMeasurementInches(dims2[2]);
+    }
+  }
+
   if (!length) {
     length = parseLength(block);
   }
 
   if (!width && /\b(pipe|tub(e|ing)|schedule|sch)\b/i.test(block)) {
     width = nominalSize;
+  }
+
+  if (!od && /\b(?:pipe|tube|tubing)\b/i.test(block) && width) {
+    od = width;
+  }
+
+  if (!wall && thickness && /\b(?:pipe|tube|tubing)\b/i.test(block)) {
+    wall = thickness;
   }
 
   if (!thickness) {
@@ -255,10 +361,21 @@ const parseBlock = (block: string): ExtractedLineItem => {
     finish,
     nominalSize,
     schedule,
+    pressureClass,
+    endType,
+    endTypeSecondary,
+    face,
+    standards,
     dimensionSummary: buildDimensionSummary(category, { thickness, width, length, nominalSize, schedule }),
     thickness,
     width,
     length,
+    od,
+    id,
+    wall,
+    angle,
+    radius,
+    notes: /eccentric/i.test(block) ? "Eccentric" : /concentric/i.test(block) ? "Concentric" : undefined,
     quantity: quantity.quantity,
     quantityUnit: quantity.quantityUnit,
     rawSpec: block,
@@ -291,10 +408,21 @@ const normalizeExtracted = (items: ExtractedLineItem[]) => {
       finish: item.finish?.toUpperCase(),
       nominalSize: item.nominalSize ?? rawParsed.nominalSize,
       schedule: item.schedule ?? rawParsed.schedule,
+      pressureClass: item.pressureClass ?? rawParsed.pressureClass,
+      endType: item.endType ?? rawParsed.endType,
+      endTypeSecondary: item.endTypeSecondary ?? rawParsed.endTypeSecondary,
+      face: item.face ?? rawParsed.face,
+      standards: item.standards?.length ? item.standards : rawParsed.standards,
       dimensionSummary: item.dimensionSummary ?? rawParsed.dimensionSummary,
       thickness: item.thickness ?? rawParsed.thickness,
       width: item.width ?? rawParsed.width,
       length: item.length ?? rawParsed.length,
+      od: item.od ?? rawParsed.od,
+      id: item.id ?? rawParsed.id,
+      wall: item.wall ?? rawParsed.wall,
+      angle: item.angle ?? rawParsed.angle,
+      radius: item.radius ?? rawParsed.radius,
+      notes: item.notes ?? rawParsed.notes,
       quantity: Math.max(1, Number(item.quantity || rawParsed.quantity || 1)),
       quantityUnit: item.quantityUnit === "lbs" ? "lbs" : "pcs",
       rawSpec: item.rawSpec || "",
@@ -344,7 +472,7 @@ const llmParse = async (text: string, provider?: LlmProvider) => {
   const prompt = `You are an industrial stainless steel RFQ extraction engine.
 Return strict JSON object with key: "items" (array).
 Each item fields:
-category, grade, finish, nominalSize, schedule, dimensionSummary, thickness, width, length, quantity, quantityUnit, rawSpec, estimatedWeightLb.
+category, grade, finish, nominalSize, schedule, pressureClass, endType, endTypeSecondary, face, standards, dimensionSummary, thickness, width, length, od, id, wall, angle, radius, notes, quantity, quantityUnit, rawSpec, estimatedWeightLb.
 Rules:
 - Handle messy multi-line email text and group lines into line items.
 - Ignore signatures, greetings, disclaimers, unsubscribe/footer text, and quoted older email thread content.
@@ -352,6 +480,8 @@ Rules:
 - Convert gauges to decimal inches.
 - Convert metric dims to inches when possible (mm/cm/m).
 - Recognize pipe strings like "32NB SCH40 length 6000mm qty 22 lengths".
+- For PVF items, also extract pressureClass, endType, endTypeSecondary, face, standards, od, id, wall, angle, radius, and notes when present.
+- Distinguish product categories as specifically as possible: pipe, tube, valve, flange, elbow, tee, reducer, cap, coupling, union, nipple, olet, gasket, strainer, and fitting variants.
 - Preserve the exact technical snippet per line item in rawSpec.
 - quantityUnit must be pcs or lbs.
 - If uncertain, keep best-effort values but include rawSpec.
