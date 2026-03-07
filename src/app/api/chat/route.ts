@@ -248,7 +248,7 @@ const llmAssist = async (params: {
   const completion = await clientConfig.client.chat.completions.create({
     model: clientConfig.model,
     temperature: 0.2,
-    max_tokens: 500,
+    max_completion_tokens: 500,
     messages: [
       { role: "system", content: prompt },
       { role: "user", content: userPayload }
