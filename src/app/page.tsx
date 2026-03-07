@@ -577,73 +577,189 @@ export default function HomePage() {
 
   if (!user) {
     return (
-      <main className="mx-auto min-h-screen max-w-md p-6">
-        <div className="space-y-4 border border-steel-200/80 bg-white/85 p-4">
-          <div>
-            <h1 className="text-2xl font-bold text-steel-800">Stainless Logic</h1>
-            <p className="text-sm text-steel-700">Sign in to access your quoting workspace.</p>
+      <main className="mx-auto min-h-screen max-w-7xl space-y-8 px-6 py-8">
+        <section className="hero-shell px-6 py-8 text-white md:px-10 md:py-10">
+          <div className="relative z-10 grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_380px] xl:items-center">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <div className="section-title !text-[rgba(255,255,255,0.55)]">Industrial RFQ automation</div>
+                <h1 className="max-w-4xl font-['Sora'] text-4xl font-semibold tracking-[-0.05em] text-white md:text-6xl">
+                  Stop burning supplier and manufacturer time on manual spec extraction.
+                </h1>
+                <p className="max-w-3xl text-base text-slate-200 md:text-lg">
+                  Stainless Logic reads dense RFQs, extracts PVF specs, compares every line against inventory and internal capability, and moves shortages into sourcing before your team gets buried in spreadsheets and PDF markups.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setAuthMode("login");
+                    document.getElementById("auth-entry")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Open The Tool
+                </button>
+                <button
+                  className="btn-ghost text-white"
+                  onClick={() => {
+                    setAuthMode("register");
+                    document.getElementById("auth-entry")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                >
+                  Create Account
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="hero-metric">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Read</div>
+                  <div className="mt-2 text-lg font-semibold">Messy RFP packages</div>
+                  <div className="mt-1 text-sm text-slate-300">Emails, PDFs, OCR exports, broken tables, and attachment bundles.</div>
+                </div>
+                <div className="hero-metric">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Compare</div>
+                  <div className="mt-2 text-lg font-semibold">Inventory and capability</div>
+                  <div className="mt-1 text-sm text-slate-300">Match specs against stock, dimensions, schedule, class, and manufacturability.</div>
+                </div>
+                <div className="hero-metric">
+                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Route</div>
+                  <div className="mt-2 text-lg font-semibold">Shortages into sourcing</div>
+                  <div className="mt-1 text-sm text-slate-300">Push uncovered demand into supplier outreach without retyping the RFQ.</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="landing-band text-white">
+              <div className="section-title !text-[rgba(255,255,255,0.55)]">What operators see</div>
+              <div className="mt-3 space-y-3">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-sm font-semibold">1. RFQ package lands</div>
+                  <div className="mt-1 text-sm text-slate-300">Agent begins parsing buyer text, attachments, and technical shorthand immediately.</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-sm font-semibold">2. Specs normalize</div>
+                  <div className="mt-1 text-sm text-slate-300">Product family, dimensions, pressure class, end connection, quantity, and standards are extracted into line items.</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-sm font-semibold">3. Inventory and sourcing split</div>
+                  <div className="mt-1 text-sm text-slate-300">Available items get priced. Gaps move into sourcing with the original commercial context intact.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <div className="landing-card">
+            <div className="section-title">For suppliers</div>
+            <div className="mt-2 text-xl font-semibold text-steel-900">Collapse hours of RFQ cleanup into a guided workflow.</div>
+            <div className="mt-2 text-sm text-steel-600">No more scanning every page manually to figure out what the buyer actually needs and what can be quoted from stock.</div>
+          </div>
+          <div className="landing-card">
+            <div className="section-title">For manufacturers</div>
+            <div className="mt-2 text-xl font-semibold text-steel-900">Know what fits your internal capability before routing work outside.</div>
+            <div className="mt-2 text-sm text-steel-600">The platform surfaces whether demand is buildable internally, stock-backed, or better pushed to upstream partners.</div>
+          </div>
+          <div className="landing-card">
+            <div className="section-title">For commercial teams</div>
+            <div className="mt-2 text-xl font-semibold text-steel-900">Move from inbound email to priced quote without losing technical detail.</div>
+            <div className="mt-2 text-sm text-steel-600">The workspace preserves spec fidelity while keeping the operator focused on the next commercial decision.</div>
+          </div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_420px]">
+          <div className="landing-card">
+            <div className="section-title">Why this matters</div>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-steel-200/70 bg-white/70 p-4">
+                <div className="text-sm font-semibold text-steel-900">Spec extraction</div>
+                <div className="mt-1 text-sm text-steel-600">Pull PVF details from buyer emails, bid packages, and attachments without copying values into spreadsheets.</div>
+              </div>
+              <div className="rounded-2xl border border-steel-200/70 bg-white/70 p-4">
+                <div className="text-sm font-semibold text-steel-900">Inventory comparison</div>
+                <div className="mt-1 text-sm text-steel-600">Match against current stock by category, grade, size, schedule, and dimensional signals.</div>
+              </div>
+              <div className="rounded-2xl border border-steel-200/70 bg-white/70 p-4">
+                <div className="text-sm font-semibold text-steel-900">Internal capability check</div>
+                <div className="mt-1 text-sm text-steel-600">Understand which lines can be fulfilled directly and which need supplier escalation.</div>
+              </div>
+              <div className="rounded-2xl border border-steel-200/70 bg-white/70 p-4">
+                <div className="text-sm font-semibold text-steel-900">Commercial output</div>
+                <div className="mt-1 text-sm text-steel-600">Attach pricing, package shortages for sourcing, and move into quote delivery from one control surface.</div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <button className={authMode === "login" ? "btn" : "btn-secondary"} onClick={() => setAuthMode("login")}>Login</button>
-            <button className={authMode === "register" ? "btn" : "btn-secondary"} onClick={() => setAuthMode("register")}>Create Account</button>
+          <div id="auth-entry" className="landing-card space-y-4">
+            <div>
+              <div className="section-title">Tool access</div>
+              <h2 className="mt-2 text-2xl font-semibold text-steel-900">Enter the quoting workspace</h2>
+              <p className="mt-1 text-sm text-steel-600">Use your work account to access the RFQ command deck, sourcing workflow, and buyer inbox.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <button className={authMode === "login" ? "btn" : "btn-secondary"} onClick={() => setAuthMode("login")}>Login</button>
+              <button className={authMode === "register" ? "btn" : "btn-secondary"} onClick={() => setAuthMode("register")}>Create Account</button>
+            </div>
+
+            {authMode === "login" ? (
+              <div className="space-y-2">
+                <input className="input" placeholder="Work email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
+                <input className="input" placeholder="Password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                <button
+                  className="btn w-full"
+                  onClick={async () => {
+                    setAuthError("");
+                    const res = await fetch("/api/auth/login", {
+                      credentials: "include",
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email: loginEmail, password: loginPassword })
+                    });
+                    const json = await res.json();
+                    if (!res.ok) return setAuthError(json.error || "Login failed");
+                    await loadCurrentUser();
+                  }}
+                >
+                  Login
+                </button>
+                <p className="text-xs text-steel-600">Demo login: `mia.manager@stainless.local` / `Password123!`</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input className="input" placeholder="Full name" value={regName} onChange={(e) => setRegName(e.target.value)} />
+                <input className="input" placeholder="Work email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
+                <input className="input" placeholder="Password (min 8 chars)" type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
+                <select className="input" value={regRole} onChange={(e) => setRegRole(e.target.value as UserRole)}>
+                  <option value="sales_rep">Sales Representative</option>
+                  <option value="inventory_manager">Inventory Manager</option>
+                  <option value="sales_manager">Sales Manager</option>
+                </select>
+                <button
+                  className="btn w-full"
+                  onClick={async () => {
+                    setAuthError("");
+                    const res = await fetch("/api/auth/register", {
+                      credentials: "include",
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, role: regRole })
+                    });
+                    const json = await res.json();
+                    if (!res.ok) return setAuthError(json.error || "Registration failed");
+                    await loadCurrentUser();
+                  }}
+                >
+                  Create Account
+                </button>
+              </div>
+            )}
+
+            {authError && <p className="text-sm text-rose-600">{authError}</p>}
           </div>
-
-          {authMode === "login" ? (
-            <div className="space-y-2">
-              <input className="input" placeholder="Work email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
-              <input className="input" placeholder="Password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
-              <button
-                className="btn w-full"
-                onClick={async () => {
-                  setAuthError("");
-                  const res = await fetch("/api/auth/login", {
-                    credentials: "include",
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: loginEmail, password: loginPassword })
-                  });
-                  const json = await res.json();
-                  if (!res.ok) return setAuthError(json.error || "Login failed");
-                  await loadCurrentUser();
-                }}
-              >
-                Login
-              </button>
-              <p className="text-xs text-steel-600">Demo login: `mia.manager@stainless.local` / `Password123!`</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <input className="input" placeholder="Full name" value={regName} onChange={(e) => setRegName(e.target.value)} />
-              <input className="input" placeholder="Work email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} />
-              <input className="input" placeholder="Password (min 8 chars)" type="password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} />
-              <select className="input" value={regRole} onChange={(e) => setRegRole(e.target.value as UserRole)}>
-                <option value="sales_rep">Sales Representative</option>
-                <option value="inventory_manager">Inventory Manager</option>
-                <option value="sales_manager">Sales Manager</option>
-              </select>
-              <button
-                className="btn w-full"
-                onClick={async () => {
-                  setAuthError("");
-                  const res = await fetch("/api/auth/register", {
-                    credentials: "include",
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, role: regRole })
-                  });
-                  const json = await res.json();
-                  if (!res.ok) return setAuthError(json.error || "Registration failed");
-                  await loadCurrentUser();
-                }}
-              >
-                Create Account
-              </button>
-            </div>
-          )}
-
-          {authError && <p className="text-sm text-rose-600">{authError}</p>}
-        </div>
+        </section>
       </main>
     );
   }
