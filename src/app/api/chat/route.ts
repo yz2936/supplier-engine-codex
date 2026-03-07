@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { mutateData, readData } from "@/lib/data-store";
-import { createLlmClient, normalizeProvider } from "@/lib/llm-provider";
+import { createLlmClient, LlmProvider, normalizeProvider } from "@/lib/llm-provider";
 import { requireUser } from "@/lib/server-auth";
 import { Manufacturer } from "@/lib/types";
 import { getSmtpConfigForUser } from "@/lib/user-email-config";
@@ -208,7 +208,7 @@ const dedupeActions = (actions: ChatAction[]) => {
 };
 
 const llmAssist = async (params: {
-  provider: "openai" | "deepseek";
+  provider: LlmProvider;
   message: string;
   context: ChatContext;
   uploadedFile?: { kind: "inventory_file" | "rfq_text"; text?: string; name?: string };
@@ -218,9 +218,7 @@ const llmAssist = async (params: {
     return {
       reply: "",
       actions: [] as ChatAction[],
-      warning: params.provider === "deepseek"
-        ? "DeepSeek is not configured. Set DEEPSEEK_API_KEY in environment variables."
-        : "OpenAI is not configured. Set OPENAI_API_KEY in environment variables."
+      warning: "OpenAI is not configured. Set OPENAI_API_KEY in environment variables."
     };
   }
 

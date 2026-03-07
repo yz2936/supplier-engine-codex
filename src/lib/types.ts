@@ -8,10 +8,14 @@ export type QuantityUnit =
   | "ea"
   | "each"
   | "lengths"
+  | "spools"
+  | "sets"
+  | "lot"
   | "lbs"
   | "kg"
   | "ft"
-  | "m";
+  | "m"
+  | "unknown";
 
 export type InventoryItem = {
   sku: string;
@@ -38,6 +42,8 @@ export type Surcharge = {
 export type ExtractedLineItem = {
   category: string;
   grade: string;
+  productFamily?: string;
+  productType?: string;
   finish?: string;
   nominalSize?: number;
   schedule?: string;
@@ -59,6 +65,8 @@ export type ExtractedLineItem = {
   quantity: number;
   quantityUnit: QuantityUnit;
   rawSpec: string;
+  sourceText?: string;
+  confidence?: number;
   estimatedWeightLb?: number;
 };
 

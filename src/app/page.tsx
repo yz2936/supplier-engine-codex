@@ -185,13 +185,6 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    const locale = typeof navigator !== "undefined" ? navigator.language.toLowerCase() : "";
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    const cnLike = locale.includes("zh-cn") || locale.includes("zh-hans") || tz.includes("Shanghai") || tz.includes("Chongqing");
-    setLlmProvider(cnLike ? "deepseek" : "openai");
-  }, []);
-
-  useEffect(() => {
     if (typeof window !== "undefined" && window.innerWidth >= 1280) {
       setChatOpen(true);
     }
@@ -804,20 +797,9 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <button
-                  className={llmProvider === "openai" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
-                  onClick={() => setLlmProvider("openai")}
-                  title="Global model route: OpenAI"
-                >
-                  OpenAI
-                </button>
-                <button
-                  className={llmProvider === "deepseek" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
-                  onClick={() => setLlmProvider("deepseek")}
-                  title="Global model route: DeepSeek"
-                >
-                  DeepSeek
-                </button>
+                <div className="rounded-full border border-steel-200/80 bg-steel-50 px-3 py-1 text-xs font-medium text-steel-700">
+                  LLM: OpenAI GPT-5.2
+                </div>
                 <button
                   className="btn-secondary ml-auto px-2.5 py-1 text-xs"
                   onClick={() => {

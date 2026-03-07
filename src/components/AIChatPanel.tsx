@@ -203,20 +203,9 @@ export function AIChatPanel({
       </div>
       <div className="flex items-center gap-2 rounded-xl border border-steel-200 bg-steel-50 p-2 text-xs">
         <span className="text-steel-600">LLM Route</span>
-        <button
-          className={llmProvider === "openai" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
-          onClick={() => onChangeLlmProvider("openai")}
-          title="OpenAI route"
-        >
-          🌐 OpenAI
-        </button>
-        <button
-          className={llmProvider === "deepseek" ? "btn px-2 py-1 text-xs" : "btn-secondary px-2 py-1 text-xs"}
-          onClick={() => onChangeLlmProvider("deepseek")}
-          title="DeepSeek route"
-        >
-          🇨🇳 DeepSeek
-        </button>
+        <span className="rounded-full border border-steel-200 bg-white px-2 py-1 font-medium text-steel-700">
+          OpenAI GPT-5.2
+        </span>
       </div>
 
       <div className={`${compact ? "min-h-0 flex-1" : "max-h-72"} space-y-2 overflow-auto rounded-xl border border-steel-200 bg-steel-50 p-2`}>
