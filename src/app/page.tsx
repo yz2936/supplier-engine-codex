@@ -28,6 +28,12 @@ type AppUser = {
 };
 
 type View = "dashboard" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
+type AgentStage = "idle" | "validating" | "parsing" | "awaiting_approval" | "ready";
+type AgentActivity = {
+  id: number;
+  tone: "neutral" | "warn" | "good";
+  text: string;
+};
 
 const defaultRFQ = "";
 
@@ -102,8 +108,13 @@ export default function HomePage() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [agentStage, setAgentStage] = useState<AgentStage>("idle");
+  const [agentActivities, setAgentActivities] = useState<AgentActivity[]>([]);
   const parseAbortRef = useRef<AbortController | null>(null);
   const parseRequestIdRef = useRef(0);
+  const agentRunIdRef = useRef(0);
+  const agentActivityIdRef = useRef(0);
+  const lastAgentSignatureRef = useRef("");
 
   const role = user?.role ?? "sales_rep";
   const renderNavIcon = (view: View) => {
@@ -233,6 +244,42 @@ export default function HomePage() {
   const activeSourceLabel = buyerEmail.trim()
     ? "Parsing inbound buyer email"
     : "Parsing manual RFQ input";
+  const agentNeedsApproval = agentStage === "awaiting_approval";
+  const agentReadyForSend = agentStage === "ready";
+  const agentStatusMeta: Record<AgentStage, { label: string; detail: string }> = {
+    idle: {
+      label: "Waiting for intake",
+      detail: "Add an RFQ and the workspace agent will begin validating, matching, and pricing automatically."
+    },
+    validating: {
+      label: "Reviewing intake",
+      detail: "The agent is checking the request source, quantity units, and product details before pricing."
+    },
+    parsing: {
+      label: "Comparing and pricing",
+      detail: "The agent is parsing products, matching inventory rigorously, and attaching commercial pricing."
+    },
+    awaiting_approval: {
+      label: "Paused for approval",
+      detail: "The priced lines are ready for your sign-off. Approve to unlock the final quote package."
+    },
+    ready: {
+      label: "Pricing ready",
+      detail: "All parsed products have been compared against inventory and priced. The quote is ready to send."
+    }
+  };
+
+  const pushAgentActivity = useCallback((text: string, tone: AgentActivity["tone"] = "neutral") => {
+    agentActivityIdRef.current += 1;
+    setAgentActivities((prev) => [...prev.slice(-4), { id: agentActivityIdRef.current, text, tone }]);
+  }, []);
+
+  const resetAgentWorkflow = useCallback(() => {
+    agentRunIdRef.current += 1;
+    lastAgentSignatureRef.current = "";
+    setAgentStage("idle");
+    setAgentActivities([]);
+  }, []);
 
   const loadCurrentUser = useCallback(async () => {
     const res = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
@@ -322,9 +369,62 @@ export default function HomePage() {
     }
   }, [llmProvider]);
 
-  const parseAndPrice = useCallback(async () => {
-    await runParse(rfqText, marginPercent);
-  }, [marginPercent, rfqText, runParse]);
+  const runWorkspaceAgent = useCallback(async (
+    rfq: string,
+    margin: number,
+    source: "manual" | "auto" | "buyer" | "files"
+  ) => {
+    const text = rfq.trim();
+    if (!text) {
+      resetAgentWorkflow();
+      setLines([]);
+      setTotal(0);
+      setError("RFQ text is required");
+      return null;
+    }
+
+    const signature = `${margin}::${text}`;
+    lastAgentSignatureRef.current = signature;
+    agentRunIdRef.current += 1;
+    const runId = agentRunIdRef.current;
+
+    setAgentStage("validating");
+    setAgentActivities([]);
+    pushAgentActivity(
+      source === "buyer"
+        ? "Agent picked up a bid-ready RFQ from the buyer inbox."
+        : source === "files"
+          ? "Agent merged the uploaded intake files into one RFQ package."
+          : source === "auto"
+            ? "Agent detected an updated RFQ and started a fresh run."
+            : "Agent started a manual workspace run."
+    );
+    pushAgentActivity("Checking quantity units, dimensional specs, and required product categories.");
+
+    setAgentStage("parsing");
+    const parsed = await runParse(text, margin);
+    if (runId !== agentRunIdRef.current) return parsed;
+    if (!parsed) {
+      pushAgentActivity("Agent stopped because the RFQ could not be parsed. Update the intake and rerun.", "warn");
+      setAgentStage("idle");
+      return null;
+    }
+
+    const shortageCount = parsed.lines.filter((line) => line.stockStatus !== "green").length;
+    pushAgentActivity(`Compared ${parsed.lines.length} line item${parsed.lines.length === 1 ? "" : "s"} against current inventory.`);
+    pushAgentActivity(`Attached pricing to ${parsed.lines.length} parsed line item${parsed.lines.length === 1 ? "" : "s"}.`, "good");
+    if (shortageCount > 0) {
+      pushAgentActivity(`${shortageCount} item${shortageCount === 1 ? "" : "s"} still need sourcing review before fulfillment.`, "warn");
+    }
+    setAgentStage("awaiting_approval");
+    return parsed;
+  }, [pushAgentActivity, resetAgentWorkflow, runParse]);
+
+  const approveAgentReview = useCallback(() => {
+    if (!lines.length) return;
+    pushAgentActivity("Approval received. Final priced lines are now locked and ready for quote delivery.", "good");
+    setAgentStage("ready");
+  }, [lines.length, pushAgentActivity]);
 
   const saveQuote = useCallback(async (override?: { lines: QuoteLine[]; total: number }) => {
     const finalLines = override?.lines ?? lines;
@@ -359,18 +459,22 @@ export default function HomePage() {
         .map((entry) => `[Source File: ${entry.name}]\n${entry.text}`)
         .join("\n\n");
 
-      setRfqText((prev) => [prev.trim(), appendedText].filter(Boolean).join("\n\n"));
+      const nextRfq = [rfqText.trim(), appendedText].filter(Boolean).join("\n\n");
+      setRfqText(nextRfq);
       setRfqSourceFiles((prev) => [
         ...prev,
         ...extracted.map((entry) => ({ name: entry.name, kind: entry.kind }))
       ]);
       setRfqFileStatus(`Loaded ${extracted.length} intake file${extracted.length === 1 ? "" : "s"} into the RFQ workspace.`);
+      if (autoParse && canGenerateQuotes(role)) {
+        await runWorkspaceAgent(nextRfq, marginPercent, "files");
+      }
     } catch (err) {
       setRfqFileStatus(err instanceof Error ? err.message : "Failed to load one or more intake files.");
     } finally {
       setRfqFileBusy(false);
     }
-  }, []);
+  }, [autoParse, marginPercent, rfqText, role, runWorkspaceAgent]);
 
   const uploadInventoryFile = useCallback(async (file: File) => {
     const form = new FormData();
@@ -422,10 +526,10 @@ export default function HomePage() {
     }
 
     for (const action of actions) {
-      if (action.type === "parse_quote") parsedResult = await runParse(nextRfq, nextMargin);
+      if (action.type === "parse_quote") parsedResult = await runWorkspaceAgent(nextRfq, nextMargin, "manual");
       if (action.type === "save_quote" && (parsedResult?.lines.length || lines.length)) await saveQuote(parsedResult ?? undefined);
     }
-  }, [lines.length, marginPercent, rfqText, runParse, saveQuote]);
+  }, [lines.length, marginPercent, rfqText, runWorkspaceAgent, saveQuote]);
 
   const startQuoteFromBuyerMessage = useCallback(async (
     payload: { buyerName: string; buyerEmail: string; rfqText: string }
@@ -440,24 +544,28 @@ export default function HomePage() {
     setBuyerEmail(payload.buyerEmail?.trim() || "");
     setRfqText(rfq);
     setSendStatus("");
-    await runParse(rfq, marginPercent);
-  }, [marginPercent, runParse]);
+    await runWorkspaceAgent(rfq, marginPercent, "buyer");
+  }, [marginPercent, runWorkspaceAgent]);
 
   useEffect(() => {
     if (!autoParse || !canGenerateQuotes(role)) return;
     const text = rfqText.trim();
     if (!text) {
+      resetAgentWorkflow();
       setLines([]);
       setTotal(0);
       setError("");
       return;
     }
 
+    const signature = `${marginPercent}::${text}`;
+    if (signature === lastAgentSignatureRef.current) return;
+
     const t = setTimeout(() => {
-      runParse(text, marginPercent);
+      void runWorkspaceAgent(text, marginPercent, "auto");
     }, 700);
     return () => clearTimeout(t);
-  }, [autoParse, marginPercent, rfqText, role, runParse]);
+  }, [autoParse, marginPercent, resetAgentWorkflow, rfqText, role, runWorkspaceAgent]);
 
   useEffect(() => () => {
     parseAbortRef.current?.abort();
@@ -821,19 +929,71 @@ export default function HomePage() {
                 </section>
 
                 <section className="rounded-2xl border border-steel-200/80 bg-white/80 p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-1">
+                      <div className="section-title">Workspace agent</div>
+                      <div className="text-base font-semibold text-steel-950">{agentStatusMeta[agentStage].label}</div>
+                      <p className="max-w-2xl text-sm text-steel-600">{agentStatusMeta[agentStage].detail}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button className="btn" onClick={() => void runWorkspaceAgent(rfqText, marginPercent, "manual")} disabled={!canGenerateQuotes(role) || busy}>
+                        {busy ? "Agent Running..." : "Run Agent"}
+                      </button>
+                      {agentNeedsApproval && (
+                        <button className="btn-secondary" onClick={approveAgentReview} disabled={!lines.length}>
+                          Approve Pricing
+                        </button>
+                      )}
+                      <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
+                        {autoParse ? "Auto-Run On" : "Auto-Run Off"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="space-y-2">
+                      {agentActivities.length
+                        ? agentActivities.map((activity) => (
+                          <div
+                            key={activity.id}
+                            className={`rounded-xl border px-3 py-2 text-sm ${
+                              activity.tone === "good"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                                : activity.tone === "warn"
+                                  ? "border-amber-200 bg-amber-50 text-amber-900"
+                                  : "border-steel-200 bg-white text-steel-700"
+                            }`}
+                          >
+                            {activity.text}
+                          </div>
+                        ))
+                        : <div className="rounded-xl border border-dashed border-steel-300 bg-white px-3 py-4 text-sm text-steel-500">The agent will start once intake is added or updated.</div>}
+                    </div>
+                    <div className="rounded-2xl border border-white/80 bg-steel-50/80 p-3">
+                      <div className="section-title">Decision point</div>
+                      <div className="mt-2 text-sm text-steel-700">
+                        {agentNeedsApproval
+                          ? "Review the priced lines, then approve to move the workspace into final quote-ready state."
+                          : agentReadyForSend
+                            ? "Pricing is complete. You can move straight into quote delivery."
+                            : "No user input is needed yet. The agent is still working or waiting for intake."}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-steel-200/80 bg-white/80 p-4">
                   <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-center gap-3">
                       <span className="step-badge">Step 2</span>
                       <div>
-                        <div className="text-sm font-semibold text-steel-900">Parse and review</div>
-                        <div className="text-xs text-steel-600">Run pricing, then review only the resulting technical lines below.</div>
+                        <div className="text-sm font-semibold text-steel-900">Review priced lines</div>
+                        <div className="text-xs text-steel-600">The agent compares each product with inventory first, then pauses here for approval.</div>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button className="btn" onClick={parseAndPrice} disabled={!canGenerateQuotes(role) || busy}>{busy ? "Parsing..." : "Parse + Price"}</button>
-                      <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
-                        {autoParse ? "Auto-Parse On" : "Auto-Parse Off"}
-                      </button>
+                      <div className="rounded-full border border-steel-200/80 bg-steel-50 px-3 py-1 text-xs font-medium text-steel-600">
+                        {busy ? "Agent is processing this RFQ" : agentNeedsApproval ? "Waiting on your approval" : agentReadyForSend ? "Quote package ready" : "Waiting for a run"}
+                      </div>
                       <button
                         className="btn-secondary"
                         onClick={() => {
@@ -847,6 +1007,7 @@ export default function HomePage() {
                           setSendStatus("");
                           setRfqSourceFiles([]);
                           setRfqFileStatus("");
+                          resetAgentWorkflow();
                         }}
                       >
                         Clear
@@ -901,10 +1062,10 @@ export default function HomePage() {
                     <span className="step-badge">Step 3</span>
                     <div>
                       <div className="text-sm font-semibold text-steel-900">Send the quote</div>
-                      <div className="text-xs text-steel-600">Keep only the customer-facing email fields open by default.</div>
+                      <div className="text-xs text-steel-600">This unlocks after pricing is approved so the final send step stays clean.</div>
                     </div>
                   </div>
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_240px]">
+                  <div className={`grid gap-3 lg:grid-cols-[minmax(0,1fr)_240px] ${agentReadyForSend ? "" : "opacity-60"}`}>
                     <div className="space-y-3">
                       <input className="input" placeholder="Email subject" value={draftSubject} onChange={(e) => setDraftSubject(e.target.value)} />
                       <textarea className="input min-h-20" placeholder="Email intro" value={draftIntro} onChange={(e) => setDraftIntro(e.target.value)} />
@@ -930,10 +1091,10 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <button className="btn-secondary" disabled={!lines.length} onClick={async () => navigator.clipboard.writeText(draft)}>Copy Draft</button>
+                        <button className="btn-secondary" disabled={!agentReadyForSend || !lines.length} onClick={async () => navigator.clipboard.writeText(draft)}>Copy Draft</button>
                         <button
                           className="btn-secondary"
-                          disabled={!lines.length || !canGenerateQuotes(role)}
+                          disabled={!agentReadyForSend || !lines.length || !canGenerateQuotes(role)}
                           onClick={async () => {
                             const result = await saveQuote();
                             if (result.ok) alert(result.message);
@@ -943,7 +1104,7 @@ export default function HomePage() {
                         </button>
                         <button
                           className="btn"
-                          disabled={!lines.length || !buyerEmail || !canGenerateQuotes(role)}
+                          disabled={!agentReadyForSend || !lines.length || !buyerEmail || !canGenerateQuotes(role)}
                           onClick={async () => {
                             setSendStatus("Sending...");
                             try {
@@ -976,13 +1137,18 @@ export default function HomePage() {
                         >
                           Send Quote Email
                         </button>
-                        <button className="btn-secondary" onClick={() => setShowDraftPreview((v) => !v)} disabled={!lines.length}>
+                        <button className="btn-secondary" onClick={() => setShowDraftPreview((v) => !v)} disabled={!agentReadyForSend || !lines.length}>
                           {showDraftPreview ? "Hide Draft Preview" : "Show Draft Preview"}
                         </button>
                       </div>
                       {sendStatus && <p className="text-xs text-steel-700">{sendStatus}</p>}
                     </div>
                   </div>
+                  {!agentReadyForSend && (
+                    <div className="mt-3 rounded-2xl border border-dashed border-steel-300 bg-steel-50/60 px-4 py-3 text-sm text-steel-600">
+                      Approve the priced lines in Step 2 before quote delivery actions become available.
+                    </div>
+                  )}
                   {showDraftPreview && (
                     <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200/80 bg-steel-50/60">
                       <div className="border-b border-steel-200/80 px-4 py-3">
