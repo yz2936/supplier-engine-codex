@@ -691,7 +691,7 @@ export default function HomePage() {
           </header>
 
           {activeView === "dashboard" && (
-            <DashboardOverview />
+            <DashboardOverview onNavigateView={setActiveView} />
           )}
 
           {activeView === "workspace" && (

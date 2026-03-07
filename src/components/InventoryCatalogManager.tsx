@@ -145,6 +145,23 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
     return vals.reduce((sum, v) => sum + v, 0) / vals.length;
   }, [recommendByGrade]);
 
+  const topRestock = useMemo(
+    () => items
+      .map((item) => ({ item, qty: draftQtyOnHand[item.sku] ?? item.qtyOnHand }))
+      .filter(({ qty }) => qty < LOW_STOCK_THRESHOLD)
+      .sort((a, b) => a.qty - b.qty)
+      .slice(0, 5),
+    [draftQtyOnHand, items]
+  );
+
+  const topSurcharge = useMemo(
+    () => enriched
+      .slice()
+      .sort((a, b) => b.rec.valuePerLb - a.rec.valuePerLb)
+      .slice(0, 5),
+    [enriched]
+  );
+
   const saveRow = async (sku: string) => {
     const basePrice = draftBasePrice[sku];
     const qtyOnHand = draftQtyOnHand[sku];
@@ -193,7 +210,7 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="section-title">Inventory Control</div>
-          <div className="font-semibold">Inventory Products</div>
+          <div className="font-semibold">Inventory decision board</div>
         </div>
         <button className="btn-secondary" onClick={load} disabled={loading}>{loading ? "Refreshing..." : "Refresh Inventory"}</button>
       </div>
@@ -214,6 +231,34 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
         <div className="kpi-card">
           <div className="text-xs text-steel-600">Avg Surcharge/lb</div>
           <div className="text-lg font-semibold">{money(avgSurcharge)}</div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-2xl border border-steel-200/80 bg-white/75 p-4">
+          <div className="section-title">Action focus</div>
+          <div className="mt-1 text-lg font-semibold text-steel-900">
+            {outRows > 0
+              ? `${outRows} SKUs are out of stock and should move to sourcing first.`
+              : lowRows > 0
+                ? `${lowRows} SKUs are below threshold and should be prioritized for replenishment.`
+                : "Inventory is stable. Review pricing and surcharge recommendations next."}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className={chipClass(onlyLowStock)} onClick={() => setOnlyLowStock((v) => !v)}>Focus Low Stock</button>
+            <button className={chipClass(onlyHighSurcharge)} onClick={() => setOnlyHighSurcharge((v) => !v)}>Focus High Surcharge</button>
+            <button className={chipClass(typeFilter === "Pipe")} onClick={() => setTypeFilter((v) => (v === "Pipe" ? "All" : "Pipe"))}>Pipe</button>
+            <button className={chipClass(typeFilter === "Valve")} onClick={() => setTypeFilter((v) => (v === "Valve" ? "All" : "Valve"))}>Valve</button>
+            <button className={chipClass(typeFilter === "Flange")} onClick={() => setTypeFilter((v) => (v === "Flange" ? "All" : "Flange"))}>Flange</button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-4">
+          <div className="section-title">Visible set</div>
+          <div className="mt-1 text-lg font-semibold text-steel-900">{filtered.length} rows in focus</div>
+          <div className="mt-2 text-sm text-steel-600">
+            Filters combine category, grade, stock risk, and surcharge pressure so the team can work a smaller queue.
+          </div>
         </div>
       </div>
 
@@ -239,27 +284,59 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
           High Surcharge Only
         </label>
       </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <div className="rounded-2xl border border-rose-200/80 bg-rose-50/60 p-4">
+          <div className="section-title">Restock queue</div>
+          <div className="mt-3 space-y-2">
+            {topRestock.map(({ item, qty }) => (
+              <div key={item.sku} className="flex items-center justify-between rounded-xl bg-white/85 px-3 py-2">
+                <div>
+                  <div className="font-semibold text-steel-900">{item.sku}</div>
+                  <div className="text-xs text-steel-600">{item.grade} {item.category} · {item.thickness} x {item.width} x {item.length}{item.schedule ? ` SCH ${item.schedule}` : ""}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold text-rose-700">{qty}</div>
+                  {editable && (
+                    <button className="btn-secondary" onClick={() => sourceThisLine(item, qty)}>
+                      Source
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!topRestock.length && <div className="text-sm text-steel-600">No urgent restock items.</div>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/60 p-4">
+          <div className="section-title">Pricing watchlist</div>
+          <div className="mt-3 space-y-2">
+            {topSurcharge.map(({ item, rec, suggested }) => (
+              <div key={item.sku} className="flex items-center justify-between rounded-xl bg-white/85 px-3 py-2">
+                <div>
+                  <div className="font-semibold text-steel-900">{item.sku}</div>
+                  <div className="text-xs text-steel-600">{item.grade} · surcharge {money(rec.valuePerLb)} / suggested {money(suggested)}</div>
+                </div>
+                {editable && (
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setDraftBasePrice((p) => ({ ...p, [item.sku]: suggested }))}
+                  >
+                    Apply
+                  </button>
+                )}
+              </div>
+            ))}
+            {!topSurcharge.length && <div className="text-sm text-steel-600">No pricing watchlist items yet.</div>}
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-steel-200 bg-steel-50 px-3 py-2 text-xs text-steel-700">
         Showing {filtered.length} of {items.length} products
       </div>
-      <div className="flex flex-wrap gap-2">
-        <button className={chipClass(typeFilter === "Pipe")} onClick={() => setTypeFilter((v) => (v === "Pipe" ? "All" : "Pipe"))}>Pipe</button>
-        <button className={chipClass(typeFilter === "Sheet")} onClick={() => setTypeFilter((v) => (v === "Sheet" ? "All" : "Sheet"))}>Sheet</button>
-        <button className={chipClass(onlyLowStock)} onClick={() => setOnlyLowStock((v) => !v)}>Under 1000</button>
-        <button className={chipClass(onlyHighSurcharge)} onClick={() => setOnlyHighSurcharge((v) => !v)}>High Surcharge</button>
-        <button
-          className="rounded-full border border-steel-300 bg-steel-50 px-3 py-1 text-xs text-steel-700"
-          onClick={() => {
-            setQuery("");
-            setTypeFilter("All");
-            setGradeFilter("All");
-            setOnlyLowStock(false);
-            setOnlyHighSurcharge(false);
-          }}
-        >
-          Clear
-        </button>
-      </div>
+
       <div className="overflow-auto">
         <table className="data-grid">
           <thead className="sticky top-0 z-10">
@@ -279,8 +356,18 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
           <tbody>
             {filtered.map(({ item, rec, suggested }) => {
               const currentQty = draftQtyOnHand[item.sku] ?? item.qtyOnHand;
+              const level = stockLevel(currentQty);
               return (
-                <tr key={item.sku} className="hover:bg-cyan-50/40">
+                <tr
+                  key={item.sku}
+                  className={
+                    level === "out"
+                      ? "bg-rose-50/70"
+                      : level === "low"
+                        ? "bg-amber-50/60"
+                        : "hover:bg-cyan-50/40"
+                  }
+                >
                 <td className="py-2 pr-3">{item.sku}</td>
                 <td className="py-2 pr-3">{item.category}</td>
                 <td className="py-2 pr-3">{item.grade}</td>
@@ -297,9 +384,9 @@ export function InventoryCatalogManager({ editable, onSourceLine }: Props) {
                   ) : currentQty}
                 </td>
                 <td className="py-2 pr-3">
-                  {stockLevel(currentQty) === "healthy" && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Healthy</span>}
-                  {stockLevel(currentQty) === "low" && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-700">Low (&lt;1000)</span>}
-                  {stockLevel(currentQty) === "out" && <span className="rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">Out</span>}
+                  {level === "healthy" && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Healthy</span>}
+                  {level === "low" && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-700">Low (&lt;1000)</span>}
+                  {level === "out" && <span className="rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">Out</span>}
                 </td>
                 <td className="py-2 pr-3">
                   {editable ? (

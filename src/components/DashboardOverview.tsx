@@ -48,39 +48,30 @@ const emptyData: DashboardPayload = {
   }
 };
 
-function InfoTip({ text }: { text: string }) {
-  return (
-    <span className="group relative inline-flex">
-      <span className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-steel-300 text-[10px] text-steel-600">i</span>
-      <span className="pointer-events-none absolute left-1/2 top-[120%] z-20 hidden w-56 -translate-x-1/2 rounded-md border border-steel-200 bg-white p-2 text-[11px] text-steel-700 shadow-lg group-hover:block">
-        {text}
-      </span>
-    </span>
-  );
-}
-
 function MetricCard({
   title,
   value,
   subtitle,
   change,
-  icon
+  tone = "default"
 }: {
   title: string;
   value: string;
   subtitle: string;
   change?: string;
-  icon: string;
+  tone?: "default" | "warn" | "good";
 }) {
+  const toneClass = tone === "warn"
+    ? "border-amber-200/80 bg-amber-50/70"
+    : tone === "good"
+      ? "border-emerald-200/80 bg-emerald-50/60"
+      : "";
   return (
-    <div className="kpi-card rounded-2xl p-4 transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(15,23,42,0.14)]">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm font-semibold text-steel-600">{title}</div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-lg text-orange-600">{icon}</div>
-      </div>
+    <div className={`kpi-card rounded-2xl p-4 ${toneClass}`}>
+      <div className="mb-3 text-sm font-semibold text-steel-600">{title}</div>
       <div className="font-['Sora'] text-4xl font-semibold text-steel-900">{value}</div>
       <div className="mt-2 text-sm text-steel-600">{subtitle}</div>
-      <div className="mt-2 text-sm font-semibold text-emerald-600">{change || "Stable"}</div>
+      <div className="mt-2 text-sm font-semibold text-steel-800">{change || "Stable"}</div>
     </div>
   );
 }
@@ -169,39 +160,36 @@ function InventoryBarsChart({ data }: { data: Array<{ month: string; demandQty: 
   );
 }
 
-function RadialGauge({ value, label }: { value: number; label: string }) {
-  const clamped = Math.max(0, Math.min(100, value));
-  const size = 220;
-  const stroke = 16;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (clamped / 100) * circumference;
-
+function StockReadiness({ healthyPercent, totalSkus, atRisk }: { healthyPercent: number; totalSkus: number; atRisk: number }) {
+  const clamped = Math.max(0, Math.min(100, healthyPercent));
   return (
-    <div className="flex flex-col items-center justify-center">
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke="#e2e8f0" strokeWidth={stroke} fill="none" />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#f97316"
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-        />
-      </svg>
-      <div className="-mt-[135px] text-center">
-        <div className="font-['Sora'] text-5xl font-semibold text-steel-900">{Math.round(clamped)}%</div>
-        <div className="text-sm text-steel-600">{label}</div>
+    <div className="space-y-4">
+      <div>
+        <div className="text-4xl font-['Sora'] font-semibold text-steel-900">{Math.round(clamped)}%</div>
+        <div className="text-sm text-steel-600">Healthy stock coverage</div>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-steel-100">
+        <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${clamped}%` }} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-xl bg-white/85 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-steel-500">Total SKUs</div>
+          <div className="mt-1 font-semibold text-steel-900">{totalSkus}</div>
+        </div>
+        <div className="rounded-xl bg-white/85 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-steel-500">At risk</div>
+          <div className="mt-1 font-semibold text-steel-900">{atRisk}</div>
+        </div>
       </div>
     </div>
   );
 }
 
-export function DashboardOverview() {
+export function DashboardOverview({
+  onNavigateView
+}: {
+  onNavigateView?: (view: "workspace" | "inventory" | "sourcing" | "buyers" | "quotes") => void;
+}) {
   const [data, setData] = useState<DashboardPayload>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -239,13 +227,62 @@ export function DashboardOverview() {
     return (healthy / data.kpis.inventoryTotalSkus) * 100;
   }, [data.kpis.inventoryLowStock, data.kpis.inventoryOutOfStock, data.kpis.inventoryTotalSkus]);
 
+  const actionItems = useMemo(() => {
+    const items: Array<{
+      title: string;
+      detail: string;
+      cta: string;
+      view: "workspace" | "inventory" | "sourcing" | "buyers" | "quotes";
+    }> = [];
+
+    if (data.kpis.inboundLast7d > 0) {
+      items.push({
+        title: "Work the inbound queue",
+        detail: `${data.kpis.inboundLast7d} inbound sourcing requests landed in the last 7 days.`,
+        cta: "Open Buyers",
+        view: "buyers"
+      });
+    }
+    if (data.kpis.inventoryOutOfStock > 0 || data.kpis.inventoryLowStock > 0) {
+      items.push({
+        title: "Resolve stock risk",
+        detail: `${data.kpis.inventoryOutOfStock} SKUs are out and ${data.kpis.inventoryLowStock} are low.`,
+        cta: "Open Inventory",
+        view: "inventory"
+      });
+    }
+    if (data.kpis.openSourcing > 0) {
+      items.push({
+        title: "Push supplier follow-up",
+        detail: `${data.kpis.openSourcing} sourcing requests are still open.`,
+        cta: "Open Sourcing",
+        view: "sourcing"
+      });
+    }
+    items.push({
+      title: "Start a new quote",
+      detail: "Move a qualified sourcing request into pricing and quote generation.",
+      cta: "Open Workspace",
+      view: "workspace"
+    });
+
+    return items.slice(0, 4);
+  }, [data.kpis.inboundLast7d, data.kpis.inventoryLowStock, data.kpis.inventoryOutOfStock, data.kpis.openSourcing]);
+
+  const decisionSummary = useMemo(() => {
+    if (data.kpis.openSourcing > 0) return "Supplier follow-up is the current bottleneck.";
+    if (data.kpis.inventoryOutOfStock > 0) return "Inventory gaps are the main fulfillment risk.";
+    if (data.kpis.inboundLast7d > 0) return "Inbound demand is active and needs qualification.";
+    return "Pipeline is stable. Use this window to clean pricing and inventory data.";
+  }, [data.kpis.inboundLast7d, data.kpis.inventoryOutOfStock, data.kpis.openSourcing]);
+
   return (
     <div className="space-y-4">
       <div className="panel panel-aurora flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="section-title">Dashboard</div>
-          <h3 className="font-['Sora'] text-3xl font-semibold text-steel-900">Command Center</h3>
-          <p className="text-steel-700">Welcome back. Here&apos;s your sourcing and quoting overview.</p>
+          <h3 className="font-['Sora'] text-3xl font-semibold text-steel-900">Decision board</h3>
+          <p className="text-steel-700">{decisionSummary}</p>
         </div>
         <button className="btn" onClick={() => void load()} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh Data"}
@@ -258,81 +295,106 @@ export function DashboardOverview() {
           value={String(data.kpis.inboundLast7d)}
           subtitle="Buyer inbound emails, last 7 days"
           change="Active pipeline"
-          icon="✉"
         />
         <MetricCard
           title="Open Sourcing"
           value={String(data.kpis.openSourcing)}
           subtitle="Requests not yet closed"
           change={`${data.kpis.emailedSourcing} already sent`}
-          icon="⛓"
+          tone={data.kpis.openSourcing > 0 ? "warn" : "default"}
         />
         <MetricCard
           title="Inventory Health"
           value={inventoryHealth}
           subtitle={`${data.kpis.inventoryLowStock} low, ${data.kpis.inventoryOutOfStock} out`}
           change="Monitor shortage"
-          icon="📦"
+          tone={inventoryHealth === "Healthy" ? "good" : "warn"}
         />
         <MetricCard
           title="Supplier Network"
           value={String(data.kpis.manufacturersTotal)}
           subtitle={`${data.kpis.manufacturersPreferred} preferred suppliers`}
           change={`${data.kpis.avgLeadTimeDays}d avg lead time`}
-          icon="🏭"
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.9fr]">
         <div className="panel space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 font-semibold text-steel-900">
-              Recent Buyer Inbound
-              <InfoTip text="Most recent inbound buyer emails routed to your team." />
+            <div>
+              <div className="section-title">Action queue</div>
+              <div className="font-semibold text-steel-900">What needs attention now</div>
             </div>
-            <div className="text-xs text-steel-500">{data.recentInbound.length} conversations</div>
+            <div className="text-xs text-steel-500">{actionItems.length} active items</div>
           </div>
-          <div className="max-h-[330px] space-y-2 overflow-auto pr-1">
-            {data.recentInbound.map((m) => (
-              <div key={m.id} className="rounded-xl border border-steel-200 bg-white/85 p-3 transition hover:border-orange-300">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold text-steel-900">{m.buyerName}</div>
-                  <div className="text-xs text-steel-600">{new Date(m.receivedAt).toLocaleString()}</div>
+          <div className="space-y-2">
+            {actionItems.map((item) => (
+              <div key={item.title} className="rounded-2xl border border-steel-200 bg-white/85 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="font-semibold text-steel-900">{item.title}</div>
+                    <div className="mt-1 text-sm text-steel-600">{item.detail}</div>
+                  </div>
+                  <button className="btn-secondary" onClick={() => onNavigateView?.(item.view)}>
+                    {item.cta}
+                  </button>
                 </div>
-                <div className="text-xs text-steel-600">{m.fromEmail}</div>
-                <div className="mt-1 text-sm text-steel-800">{m.subject || "(No subject)"}</div>
               </div>
             ))}
-            {!data.recentInbound.length && <div className="text-sm text-steel-600">No inbound messages yet.</div>}
+            {!actionItems.length && <div className="text-sm text-steel-600">No urgent actions right now.</div>}
           </div>
         </div>
 
         <div className="panel panel-aurora space-y-3">
-          <div className="flex items-center gap-2 font-semibold text-steel-900">
-            Inventory Occupancy
-            <InfoTip text="Share of SKUs currently in healthy stock status, excluding low/out-of-stock lines." />
+          <div>
+            <div className="section-title">Stock readiness</div>
+            <div className="font-semibold text-steel-900">Current inventory posture</div>
           </div>
-          <RadialGauge value={inventoryHealthPercent} label="Healthy Stock" />
-          <div className="rounded-xl border border-steel-200 bg-white/80 p-3 text-sm text-steel-700">
-            Total SKUs: {data.kpis.inventoryTotalSkus} · At Risk: {data.kpis.inventoryLowStock + data.kpis.inventoryOutOfStock}
-          </div>
+          <StockReadiness
+            healthyPercent={inventoryHealthPercent}
+            totalSkus={data.kpis.inventoryTotalSkus}
+            atRisk={data.kpis.inventoryLowStock + data.kpis.inventoryOutOfStock}
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="panel">
-          <div className="mb-2 flex items-center gap-2 font-semibold">
-            RFQs vs Quotes (Past 6 Months)
-            <InfoTip text="RFQs are inbound buyer requests. Quotes are created quote records in the same month." />
+          <div className="mb-2">
+            <div className="section-title">Trend</div>
+            <div className="font-semibold">RFQs vs quotes</div>
           </div>
           <DualLineChart data={data.trends.rfqQuote} />
         </div>
         <div className="panel">
-          <div className="mb-2 flex items-center gap-2 font-semibold">
-            Inventory Change Trend (Past 6 Months)
-            <InfoTip text="Estimated monthly movement: quote demand quantity vs inventory restock quantity from sourcing requests." />
+          <div className="mb-2">
+            <div className="section-title">Trend</div>
+            <div className="font-semibold">Inventory demand vs restock</div>
           </div>
           <InventoryBarsChart data={data.trends.inventory} />
+        </div>
+      </div>
+
+      <div className="panel space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="section-title">Recent inbound</div>
+            <div className="font-semibold text-steel-900">Latest buyer activity</div>
+          </div>
+          <button className="btn-secondary" onClick={() => onNavigateView?.("buyers")}>Open Buyers</button>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {data.recentInbound.map((m) => (
+            <div key={m.id} className="rounded-xl border border-steel-200 bg-white/85 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold text-steel-900">{m.buyerName}</div>
+                <div className="text-xs text-steel-600">{new Date(m.receivedAt).toLocaleString()}</div>
+              </div>
+              <div className="text-xs text-steel-600">{m.fromEmail}</div>
+              <div className="mt-1 text-sm text-steel-800">{m.subject || "(No subject)"}</div>
+            </div>
+          ))}
+          {!data.recentInbound.length && <div className="text-sm text-steel-600">No inbound messages yet.</div>}
         </div>
       </div>
 
