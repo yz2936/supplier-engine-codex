@@ -147,15 +147,15 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
     : messages;
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-      <div className="panel panel-aurora space-y-2">
-        <div className="flex items-center justify-between gap-2">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="panel panel-aurora space-y-3 overflow-hidden">
+        <div className="space-y-2">
           <div className="font-semibold">Buyer Profiles</div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2 text-xs text-steel-700">
-              <span>Inbox Filter</span>
+          <div className="grid grid-cols-1 gap-2">
+            <label className="flex items-center justify-between gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2 text-xs text-steel-700">
+              <span className="shrink-0">Inbox Filter</span>
               <select
-                className="bg-transparent outline-none"
+                className="min-w-0 bg-transparent text-right outline-none"
                 value={procurementOnly ? "buying_intent" : "all"}
                 onChange={(e) => {
                   const next = e.target.value === "buying_intent";
@@ -168,7 +168,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
               </select>
             </label>
             <button
-              className="btn-secondary"
+              className="btn-secondary w-full"
               disabled={syncing}
               onClick={async () => {
                 await syncInbound(false);
@@ -178,42 +178,52 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
             </button>
           </div>
         </div>
-        {buyers.map((b) => (
-          <button
-            key={b.id}
-            className={selectedBuyerId === b.id ? "w-full rounded border border-steel-500 bg-steel-50 p-2 text-left" : "w-full rounded border border-steel-200 p-2 text-left"}
-            onClick={() => setSelectedBuyerId(b.id)}
-          >
-            <div className="font-medium">{b.companyName}</div>
-            <div className="text-xs text-steel-700">{b.contactName || "Buyer Contact"} · {b.email}</div>
-            <div className="text-xs text-steel-600">{b.status} · {new Date(b.lastInteractionAt).toLocaleString()}</div>
-          </button>
-        ))}
-        {!buyers.length && <div className="text-sm text-steel-700">No routed buyers yet.</div>}
+        <div className="max-h-[560px] space-y-2 overflow-auto pr-1">
+          {buyers.map((b) => (
+            <button
+              key={b.id}
+              className={selectedBuyerId === b.id
+                ? "w-full rounded-2xl border border-steel-500 bg-steel-50 p-3 text-left"
+                : "w-full rounded-2xl border border-steel-200 bg-white/80 p-3 text-left"}
+              onClick={() => setSelectedBuyerId(b.id)}
+            >
+              <div className="truncate font-medium">{b.companyName}</div>
+              <div className="truncate text-xs text-steel-700">{b.contactName || "Buyer Contact"} · {b.email}</div>
+              <div className="text-xs text-steel-600">{b.status} · {new Date(b.lastInteractionAt).toLocaleString()}</div>
+            </button>
+          ))}
+          {!buyers.length && <div className="text-sm text-steel-700">No routed buyers yet.</div>}
+        </div>
         {info && <div className="text-xs text-steel-700">{info}</div>}
         {filterInfo && <div className="text-xs text-steel-600">{filterInfo}</div>}
       </div>
 
-      <div className="space-y-4">
-        <div className="panel panel-aurora space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="font-semibold">Buyer Conversation</div>
+      <div className="min-w-0 space-y-4">
+        <div className="panel panel-aurora space-y-3 overflow-hidden">
+          <div className="flex flex-col gap-2 border-b border-steel-200/80 pb-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="font-semibold">Buyer Conversation</div>
+              <div className="text-xs text-steel-600">Review qualified requests and open quoting directly from the thread.</div>
+            </div>
             <div className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
-              ★ Target RFQ / buying intent
+              ★ Buying intent
             </div>
           </div>
           {selectedBuyer ? (
             <>
-              <div className="text-sm text-steel-700">{selectedBuyer.companyName} · {selectedBuyer.email}</div>
-              <div className="flex flex-wrap gap-2">
-                <button className="btn-secondary" disabled={filteringMessages} onClick={() => void applyProcurementFilter()}>
+              <div className="grid gap-2 rounded-2xl border border-steel-200/80 bg-white/75 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <div className="min-w-0 text-sm text-steel-700">
+                  <div className="truncate font-medium text-steel-900">{selectedBuyer.companyName}</div>
+                  <div className="truncate">{selectedBuyer.email}</div>
+                </div>
+                <button className="btn-secondary w-full sm:w-auto" disabled={filteringMessages} onClick={() => void applyProcurementFilter()}>
                   {filteringMessages ? "Filtering..." : "Refresh Sourcing Filter"}
                 </button>
-                <div className="rounded-full border border-steel-200 bg-white px-3 py-2 text-xs text-steel-600">
-                  Showing {procurementOnly ? "buying intent only" : "all inbound and outbound messages"}
-                </div>
               </div>
-              <div className="max-h-72 space-y-2 overflow-auto rounded border border-steel-200 bg-steel-50 p-2">
+              <div className="rounded-full border border-steel-200 bg-white px-3 py-2 text-xs text-steel-600">
+                  Showing {procurementOnly ? "buying intent only" : "all inbound and outbound messages"}
+              </div>
+              <div className="max-h-[560px] space-y-2 overflow-auto rounded-2xl border border-steel-200 bg-steel-50/80 p-2">
                 {displayedMessages.map((m) => (
                   <div
                     key={m.id}
@@ -233,8 +243,8 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-steel-700">{m.subject}</div>
-                    <div className="mt-1 whitespace-pre-wrap text-sm">{m.bodyText}</div>
+                    <div className="break-words text-xs text-steel-700">{m.subject}</div>
+                    <div className="mt-1 max-w-full whitespace-pre-wrap break-words text-sm text-steel-800">{m.bodyText}</div>
                     {m.direction === "inbound" && onStartQuote && (
                       <button
                         className="btn-secondary mt-2"
@@ -268,16 +278,18 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
         </div>
 
         {selectedBuyer && (
-          <div className="panel panel-aurora space-y-2">
+          <div className="panel panel-aurora space-y-3 overflow-hidden">
             <div className="font-semibold">Manager Notes</div>
-            <select className="input" value={status} onChange={(e) => setStatus(e.target.value as Buyer["status"])}>
-              <option>New</option>
-              <option>Active</option>
-              <option>Dormant</option>
-            </select>
-            <textarea className="input min-h-24" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Buyer notes" />
+            <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
+              <select className="input" value={status} onChange={(e) => setStatus(e.target.value as Buyer["status"])}>
+                <option>New</option>
+                <option>Active</option>
+                <option>Dormant</option>
+              </select>
+              <textarea className="input min-h-24" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Buyer notes" />
+            </div>
             <button
-              className="btn"
+              className="btn w-full md:w-auto"
               onClick={async () => {
                 setInfo("Saving...");
                 const res = await fetch(`/api/buyers/${selectedBuyer.id}`, {

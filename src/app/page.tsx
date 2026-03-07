@@ -96,6 +96,7 @@ export default function HomePage() {
   const [draftPaymentTerms, setDraftPaymentTerms] = useState("Net 30");
   const [draftFreightTerms, setDraftFreightTerms] = useState("Packed for sea freight");
   const [draftNotes, setDraftNotes] = useState("");
+  const [showDraftPreview, setShowDraftPreview] = useState(false);
   const [sendStatus, setSendStatus] = useState("");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("openai");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -732,165 +733,146 @@ export default function HomePage() {
 
           {activeView === "workspace" && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_330px]">
-                <section className="space-y-4">
-                  <div className="panel panel-aurora space-y-4">
-                    <div className="flex flex-col gap-3 border-b border-steel-200/80 pb-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-1">
-                        <div className="section-title">Workspace</div>
-                        <div className="text-xl font-semibold text-steel-950">Guided RFP workflow</div>
-                        <p className="max-w-2xl text-sm text-steel-600">
-                          Work left to right: confirm the source, parse and review the technical lines, then send the quote.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <span className="neo-chip">1. Source</span>
-                        <span className="neo-chip">2. Review</span>
-                        <span className="neo-chip">3. Deliver</span>
-                      </div>
+              <div className="panel panel-aurora space-y-4">
+                <div className="flex flex-col gap-3 border-b border-steel-200/80 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-1">
+                    <div className="section-title">Workspace</div>
+                    <div className="text-xl font-semibold text-steel-950">Guided RFP workflow</div>
+                    <p className="max-w-2xl text-sm text-steel-600">
+                      Start with intake, run pricing, review the line items, then send the quote. Only the current decision area stays on screen.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                    <div className="kpi-card">
+                      <div className="section-title">Source</div>
+                      <div className="mt-1 text-base font-bold text-steel-900">{rfqSourceFiles.length || (rfqText.trim() ? 1 : 0)}</div>
                     </div>
+                    <div className="kpi-card">
+                      <div className="section-title">Lines</div>
+                      <div className="mt-1 text-base font-bold text-steel-900">{lines.length}</div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="section-title">Need source</div>
+                      <div className="mt-1 text-base font-bold text-rose-700">{stockSummary.red}</div>
+                    </div>
+                    <div className="kpi-card">
+                      <div className="section-title">Total</div>
+                      <div className="mt-1 text-base font-bold text-teal-800">{money(total)}</div>
+                    </div>
+                  </div>
+                </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-                      <div className="rounded-2xl border border-orange-200/70 bg-orange-50/70 p-4">
-                        <div className="mb-3 flex items-center gap-3">
-                          <span className="step-badge">Step 1</span>
-                          <div>
-                            <div className="text-sm font-semibold text-steel-900">Confirm request source</div>
-                            <div className="text-xs text-steel-600">Make sure the buyer and source email are correct before parsing.</div>
-                          </div>
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <input className="input" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
-                          <input className="input" placeholder="Buyer name" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
-                          <input className="input md:col-span-2" placeholder="Buyer email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
-                        </div>
-                        <div className="mt-3 rounded-2xl border border-white/80 bg-white/75 p-3">
-                          <div className="section-title">Active source</div>
-                          <div className="mt-1 text-sm font-semibold text-steel-900">{activeSourceLabel}</div>
-                          <div className="text-sm text-steel-600">{activeSourceEmail}</div>
-                        </div>
-                        <div className="mt-3 rounded-2xl border border-dashed border-steel-300 bg-white/75 p-4">
-                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
-                              <div className="section-title">Upload source files</div>
-                              <div className="mt-1 text-sm font-semibold text-steel-900">Load PDF, Excel, Word, email, or text files into intake</div>
-                              <div className="text-xs text-steel-600">Supported: PDF, XLSX, XLS, CSV, DOC, DOCX, TXT, MD, EML, RTF, JSON, XML.</div>
-                            </div>
-                            <label className="btn-secondary cursor-pointer text-center">
-                              {rfqFileBusy ? "Loading..." : "Add Intake Files"}
-                              <input
-                                type="file"
-                                multiple
-                                accept={RFQ_FILE_ACCEPT}
-                                className="hidden"
-                                disabled={rfqFileBusy}
-                                onChange={(e) => {
-                                  void loadRfqFiles(e.target.files);
-                                  e.currentTarget.value = "";
-                                }}
-                              />
-                            </label>
-                          </div>
-                          {!!rfqSourceFiles.length && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {rfqSourceFiles.map((file) => (
-                                <div key={`${file.name}-${file.kind}`} className="rounded-full border border-steel-200 bg-steel-50 px-3 py-1 text-xs text-steel-700">
-                                  {file.name} · {file.kind}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {rfqFileStatus && <div className="mt-3 text-xs text-steel-600">{rfqFileStatus}</div>}
-                        </div>
-                        <textarea
-                          className="input mt-3 min-h-[220px] font-mono text-xs md:min-h-[260px]"
-                          value={rfqText}
-                          onChange={(e) => setRfqText(e.target.value)}
-                          placeholder="Paste the RFP or inbound buyer request here"
-                        />
+                <section className="rounded-2xl border border-orange-200/70 bg-orange-50/70 p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="step-badge">Step 1</span>
+                    <div>
+                      <div className="text-sm font-semibold text-steel-900">Load the request</div>
+                      <div className="text-xs text-steel-600">Set the buyer, add files if needed, and keep all source material in one intake box.</div>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <input className="input" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
+                    <input className="input" placeholder="Buyer name" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
+                    <input className="input" placeholder="Buyer email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
+                  </div>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+                    <textarea
+                      className="input min-h-[220px] font-mono text-xs md:min-h-[260px]"
+                      value={rfqText}
+                      onChange={(e) => setRfqText(e.target.value)}
+                      placeholder="Paste the RFP or inbound buyer request here"
+                    />
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-white/80 bg-white/75 p-3">
+                        <div className="section-title">Active source</div>
+                        <div className="mt-1 text-sm font-semibold text-steel-900">{activeSourceLabel}</div>
+                        <div className="text-sm text-steel-600">{activeSourceEmail}</div>
                       </div>
-
-                      <div className="space-y-3 rounded-2xl border border-steel-200/80 bg-white/75 p-4">
-                        <div className="mb-1 flex items-center gap-3">
-                          <span className="step-badge">Step 2</span>
-                          <div>
-                            <div className="text-sm font-semibold text-steel-900">Parse and price</div>
-                            <div className="text-xs text-steel-600">Apply margin, generate line items, and validate stock coverage.</div>
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3">
-                          <div className="flex items-center justify-between text-sm font-medium text-steel-800">
-                            <span>Margin</span>
-                            <span>{marginPercent}%</span>
-                          </div>
-                          <input type="range" min={0} max={40} value={marginPercent} className="mt-3 w-full" onChange={(e) => setMarginPercent(Number(e.target.value))} disabled={!canGenerateQuotes(role)} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="kpi-card">
-                            <div className="section-title">Lines</div>
-                            <div className="mt-1 text-xl font-bold text-steel-900">{lines.length}</div>
-                          </div>
-                          <div className="kpi-card">
-                            <div className="section-title">Total</div>
-                            <div className="mt-1 text-xl font-bold text-teal-800">{money(total)}</div>
-                          </div>
-                          <div className="kpi-card">
-                            <div className="section-title">In stock</div>
-                            <div className="mt-1 text-xl font-bold text-emerald-700">{stockSummary.green}</div>
-                          </div>
-                          <div className="kpi-card">
-                            <div className="section-title">Need source</div>
-                            <div className="mt-1 text-xl font-bold text-rose-700">{stockSummary.red}</div>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button className="btn" onClick={parseAndPrice} disabled={!canGenerateQuotes(role) || busy}>{busy ? "Parsing..." : "Parse + Price"}</button>
-                          <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
-                            {autoParse ? "Auto-Parse On" : "Auto-Parse Off"}
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            className="btn-secondary"
-                            onClick={() => {
-                              setCustomerName("");
-                              setRfqText("");
-                              setBuyerEmail("");
-                              setBuyerName("");
-                              setLines([]);
-                              setTotal(0);
-                              setError("");
-                              setSendStatus("");
-                              setRfqSourceFiles([]);
-                              setRfqFileStatus("");
+                      <div className="rounded-2xl border border-dashed border-steel-300 bg-white/75 p-3">
+                        <div className="text-sm font-semibold text-steel-900">Source files</div>
+                        <div className="mt-1 text-xs text-steel-600">PDF, Excel, Word, email, and text documents are merged into intake.</div>
+                        <label className="btn-secondary mt-3 block cursor-pointer text-center">
+                          {rfqFileBusy ? "Loading..." : "Add Intake Files"}
+                          <input
+                            type="file"
+                            multiple
+                            accept={RFQ_FILE_ACCEPT}
+                            className="hidden"
+                            disabled={rfqFileBusy}
+                            onChange={(e) => {
+                              void loadRfqFiles(e.target.files);
+                              e.currentTarget.value = "";
                             }}
-                          >
-                            Clear
-                          </button>
-                          <button className="btn-secondary" onClick={async () => navigator.clipboard.writeText(draft)} disabled={!lines.length}>Copy Draft</button>
-                          <button
-                            className="btn-secondary"
-                            disabled={!lines.length || !canGenerateQuotes(role)}
-                            onClick={async () => {
-                              const result = await saveQuote();
-                              if (result.ok) alert(result.message);
-                            }}
-                          >
-                            Save Quote
-                          </button>
-                        </div>
-                        {error && <p className="text-sm text-rose-600">{error}</p>}
+                          />
+                        </label>
+                        {!!rfqSourceFiles.length && (
+                          <div className="mt-3 space-y-1">
+                            {rfqSourceFiles.map((file) => (
+                              <div key={`${file.name}-${file.kind}`} className="truncate text-xs text-steel-700">
+                                {file.name} · {file.kind}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {rfqFileStatus && <div className="mt-3 text-xs text-steel-600">{rfqFileStatus}</div>}
                       </div>
                     </div>
                   </div>
+                </section>
 
-                  <div className="panel space-y-3">
+                <section className="rounded-2xl border border-steel-200/80 bg-white/80 p-4">
+                  <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-center gap-3">
                       <span className="step-badge">Step 2</span>
                       <div>
-                        <div className="text-sm font-semibold text-steel-900">Review parsed technical lines</div>
-                        <div className="text-xs text-steel-600">Focus on category, pressure class, end prep, standards, and dimensions before sending.</div>
+                        <div className="text-sm font-semibold text-steel-900">Parse and review</div>
+                        <div className="text-xs text-steel-600">Run pricing, then review only the resulting technical lines below.</div>
                       </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button className="btn" onClick={parseAndPrice} disabled={!canGenerateQuotes(role) || busy}>{busy ? "Parsing..." : "Parse + Price"}</button>
+                      <button className="btn-secondary" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
+                        {autoParse ? "Auto-Parse On" : "Auto-Parse Off"}
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => {
+                          setCustomerName("");
+                          setRfqText("");
+                          setBuyerEmail("");
+                          setBuyerName("");
+                          setLines([]);
+                          setTotal(0);
+                          setError("");
+                          setSendStatus("");
+                          setRfqSourceFiles([]);
+                          setRfqFileStatus("");
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3">
+                        <div className="flex items-center justify-between text-sm font-medium text-steel-800">
+                          <span>Margin</span>
+                          <span>{marginPercent}%</span>
+                        </div>
+                        <input type="range" min={0} max={40} value={marginPercent} className="mt-3 w-full" onChange={(e) => setMarginPercent(Number(e.target.value))} disabled={!canGenerateQuotes(role)} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="kpi-card">
+                          <div className="section-title">In stock</div>
+                          <div className="mt-1 text-xl font-bold text-emerald-700">{stockSummary.green}</div>
+                        </div>
+                        <div className="kpi-card">
+                          <div className="section-title">Need source</div>
+                          <div className="mt-1 text-xl font-bold text-rose-700">{stockSummary.red}</div>
+                        </div>
+                      </div>
+                      {error && <p className="text-sm text-rose-600">{error}</p>}
                     </div>
                     <ResultsTable
                       lines={lines}
@@ -914,87 +896,103 @@ export default function HomePage() {
                   </div>
                 </section>
 
-                <section className="panel space-y-4">
-                  <div className="flex items-center gap-3 border-b border-steel-200/80 pb-4">
+                <section className="rounded-2xl border border-steel-200/80 bg-white/80 p-4">
+                  <div className="mb-3 flex items-center gap-3">
                     <span className="step-badge">Step 3</span>
                     <div>
-                      <div className="text-lg font-semibold text-steel-950">Deliver quote</div>
-                      <div className="text-xs text-steel-600">Once the line items look right, finalize the buyer email and send.</div>
+                      <div className="text-sm font-semibold text-steel-900">Send the quote</div>
+                      <div className="text-xs text-steel-600">Keep only the customer-facing email fields open by default.</div>
                     </div>
                   </div>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_240px]">
+                    <div className="space-y-3">
+                      <input className="input" placeholder="Email subject" value={draftSubject} onChange={(e) => setDraftSubject(e.target.value)} />
+                      <textarea className="input min-h-20" placeholder="Email intro" value={draftIntro} onChange={(e) => setDraftIntro(e.target.value)} />
+                      <details className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3">
+                        <summary className="cursor-pointer text-sm font-medium text-steel-900">Advanced commercial terms</summary>
+                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <input className="input" placeholder="ETA" value={draftEta} onChange={(e) => setDraftEta(e.target.value)} />
+                          <input className="input" type="number" min={1} value={draftValidDays} onChange={(e) => setDraftValidDays(Number(e.target.value || 7))} />
+                          <input className="input" placeholder="Incoterm" value={draftIncoterm} onChange={(e) => setDraftIncoterm(e.target.value)} />
+                          <input className="input" placeholder="Payment terms" value={draftPaymentTerms} onChange={(e) => setDraftPaymentTerms(e.target.value)} />
+                          <input className="input sm:col-span-2" placeholder="Freight terms" value={draftFreightTerms} onChange={(e) => setDraftFreightTerms(e.target.value)} />
+                          <textarea className="input sm:col-span-2 min-h-16" placeholder="Additional notes" value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} />
+                        </div>
+                      </details>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3 text-sm">
+                        <div className="section-title">Send checklist</div>
+                        <div className="mt-2 space-y-1 text-steel-700">
+                          <div>{buyerEmail ? "Buyer email ready" : "Buyer email missing"}</div>
+                          <div>{lines.length ? `${lines.length} priced line items ready` : "No priced line items yet"}</div>
+                          <div>{total > 0 ? `Quote total ${money(total)}` : "Quote total pending"}</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button className="btn-secondary" disabled={!lines.length} onClick={async () => navigator.clipboard.writeText(draft)}>Copy Draft</button>
+                        <button
+                          className="btn-secondary"
+                          disabled={!lines.length || !canGenerateQuotes(role)}
+                          onClick={async () => {
+                            const result = await saveQuote();
+                            if (result.ok) alert(result.message);
+                          }}
+                        >
+                          Save Quote
+                        </button>
+                        <button
+                          className="btn"
+                          disabled={!lines.length || !buyerEmail || !canGenerateQuotes(role)}
+                          onClick={async () => {
+                            setSendStatus("Sending...");
+                            try {
+                              const res = await fetch("/api/quote-email", {
+                                credentials: "include",
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  buyerEmail,
+                                  customerName,
+                                  lines,
+                                  total,
+                                  meta: draftMeta
+                                })
+                              });
 
-                  <div className="grid grid-cols-1 gap-2">
-                    <input className="input" placeholder="Email subject" value={draftSubject} onChange={(e) => setDraftSubject(e.target.value)} />
-                    <textarea className="input min-h-20" placeholder="Email intro" value={draftIntro} onChange={(e) => setDraftIntro(e.target.value)} />
-                  </div>
+                              const raw = await res.text();
+                              let payload: { message?: string; error?: string } = {};
+                              try {
+                                payload = raw ? JSON.parse(raw) : {};
+                              } catch {
+                                payload = { error: raw || "Unexpected server response" };
+                              }
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <input className="input" placeholder="ETA" value={draftEta} onChange={(e) => setDraftEta(e.target.value)} />
-                    <input className="input" type="number" min={1} value={draftValidDays} onChange={(e) => setDraftValidDays(Number(e.target.value || 7))} />
-                    <input className="input" placeholder="Incoterm" value={draftIncoterm} onChange={(e) => setDraftIncoterm(e.target.value)} />
-                    <input className="input" placeholder="Payment terms" value={draftPaymentTerms} onChange={(e) => setDraftPaymentTerms(e.target.value)} />
-                  </div>
-
-                  <input className="input" placeholder="Freight terms" value={draftFreightTerms} onChange={(e) => setDraftFreightTerms(e.target.value)} />
-                  <textarea className="input min-h-16" placeholder="Additional notes" value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} />
-
-                  <div className="rounded-2xl border border-steel-200/80 bg-steel-50/70 p-3 text-sm">
-                    <div className="section-title">Send checklist</div>
-                    <div className="mt-2 space-y-1 text-steel-700">
-                      <div>{buyerEmail ? "Buyer email ready" : "Buyer email missing"}</div>
-                      <div>{lines.length ? `${lines.length} priced line items ready` : "No priced line items yet"}</div>
-                      <div>{total > 0 ? `Quote total ${money(total)}` : "Quote total pending"}</div>
+                              setSendStatus(res.ok ? payload.message || "Sent" : payload.error || "Failed to send");
+                            } catch (err) {
+                              setSendStatus(err instanceof Error ? err.message : "Failed to send");
+                            }
+                          }}
+                        >
+                          Send Quote Email
+                        </button>
+                        <button className="btn-secondary" onClick={() => setShowDraftPreview((v) => !v)} disabled={!lines.length}>
+                          {showDraftPreview ? "Hide Draft Preview" : "Show Draft Preview"}
+                        </button>
+                      </div>
+                      {sendStatus && <p className="text-xs text-steel-700">{sendStatus}</p>}
                     </div>
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <button className="btn-secondary" disabled={!lines.length} onClick={async () => navigator.clipboard.writeText(draft)}>Copy Updated Draft</button>
-                    <button
-                      className="btn"
-                      disabled={!lines.length || !buyerEmail || !canGenerateQuotes(role)}
-                      onClick={async () => {
-                        setSendStatus("Sending...");
-                        try {
-                          const res = await fetch("/api/quote-email", {
-                            credentials: "include",
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              buyerEmail,
-                              customerName,
-                              lines,
-                              total,
-                              meta: draftMeta
-                            })
-                          });
-
-                          const raw = await res.text();
-                          let payload: { message?: string; error?: string } = {};
-                          try {
-                            payload = raw ? JSON.parse(raw) : {};
-                          } catch {
-                            payload = { error: raw || "Unexpected server response" };
-                          }
-
-                          setSendStatus(res.ok ? payload.message || "Sent" : payload.error || "Failed to send");
-                        } catch (err) {
-                          setSendStatus(err instanceof Error ? err.message : "Failed to send");
-                        }
-                      }}
-                    >
-                      Send Quote Email
-                    </button>
-                  </div>
-                  {sendStatus && <p className="text-xs text-steel-700">{sendStatus}</p>}
-
-                  <div className="overflow-hidden rounded-2xl border border-steel-200/80 bg-steel-50/60">
-                    <div className="border-b border-steel-200/80 px-4 py-3">
-                      <div className="section-title">Draft preview</div>
+                  {showDraftPreview && (
+                    <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200/80 bg-steel-50/60">
+                      <div className="border-b border-steel-200/80 px-4 py-3">
+                        <div className="section-title">Draft preview</div>
+                      </div>
+                      <div className="max-h-[320px] overflow-auto px-4 py-3 text-xs whitespace-pre-wrap text-steel-700">
+                        {draft}
+                      </div>
                     </div>
-                    <div className="max-h-[420px] overflow-auto px-4 py-3 text-xs whitespace-pre-wrap text-steel-700">
-                      {draft}
-                    </div>
-                  </div>
+                  )}
                 </section>
               </div>
             </div>
