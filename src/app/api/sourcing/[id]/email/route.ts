@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
+import { QuantityUnit } from "@/lib/types";
 import { getSmtpConfigForUser } from "@/lib/user-email-config";
 
 const escapeHtml = (value: string) =>
@@ -14,7 +15,7 @@ const escapeHtml = (value: string) =>
 
 const buildDefaultBody = (request: {
   customerName?: string;
-  items: Array<{ productType: string; grade: string; dimension?: string; quantity: number; unit: "pcs" | "lbs" }>;
+  items: Array<{ productType: string; grade: string; dimension?: string; quantity: number; unit: QuantityUnit }>;
   notes?: string;
   reason: "low_stock" | "out_of_stock" | "new_demand";
 }) => {

@@ -2,6 +2,17 @@ export type UserRole = "sales_rep" | "inventory_manager" | "sales_manager";
 
 export type StockStatus = "green" | "yellow" | "red";
 
+export type QuantityUnit =
+  | "pcs"
+  | "pieces"
+  | "ea"
+  | "each"
+  | "lengths"
+  | "lbs"
+  | "kg"
+  | "ft"
+  | "m";
+
 export type InventoryItem = {
   sku: string;
   category: string;
@@ -46,7 +57,7 @@ export type ExtractedLineItem = {
   radius?: string;
   notes?: string;
   quantity: number;
-  quantityUnit: "pcs" | "lbs";
+  quantityUnit: QuantityUnit;
   rawSpec: string;
   estimatedWeightLb?: number;
 };
@@ -64,7 +75,7 @@ export type QuoteLine = {
   sku?: string;
   description: string;
   quantity: number;
-  unit: "pcs" | "lbs";
+  unit: QuantityUnit;
   unitPrice: number;
   extendedPrice: number;
   stockStatus: StockStatus;
@@ -101,7 +112,7 @@ export type SourcingRequestItem = {
   grade: string;
   dimension?: string;
   quantity: number;
-  unit: "pcs" | "lbs";
+  unit: QuantityUnit;
   requestedLength?: number;
   notes?: string;
 };

@@ -3,6 +3,8 @@ import { ExtractedLineItem } from "@/lib/types";
 import { createLlmClient, LlmProvider } from "@/lib/llm-provider";
 import { calcWeightFromGeometry, detectCategory, parseGaugeOrThickness, parseMeasurementInches } from "@/lib/utils";
 
+const quantityUnits = ["pcs", "pieces", "ea", "each", "lengths", "lbs", "kg", "ft", "m"] as const;
+
 const lineItemSchema = z.object({
   category: z.string(),
   grade: z.string(),
@@ -25,7 +27,7 @@ const lineItemSchema = z.object({
   radius: z.string().optional(),
   notes: z.string().optional(),
   quantity: z.coerce.number(),
-  quantityUnit: z.preprocess((v) => String(v ?? "").toLowerCase(), z.enum(["pcs", "lbs"])),
+  quantityUnit: z.preprocess((v) => String(v ?? "").toLowerCase(), z.enum(quantityUnits)),
   rawSpec: z.string(),
   estimatedWeightLb: z.coerce.number().optional()
 });
@@ -92,21 +94,44 @@ const parseGrade = (text: string) => {
 };
 
 const parseQuantity = (text: string) => {
-  const qtyLine = text.match(/\bqty(?:uantity)?\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(lbs?|pounds?|lengths?|pcs?|pieces?)?\b/i);
+  const normalizeQuantityUnit = (unitRaw?: string) => {
+    const unit = String(unitRaw ?? "").toLowerCase().trim();
+    if (!unit) return "pcs" as const;
+    if (unit.startsWith("lb") || unit.startsWith("pound")) return "lbs" as const;
+    if (unit === "kg" || unit.startsWith("kilogram")) return "kg" as const;
+    if (unit === "ft" || unit.startsWith("foot") || unit.startsWith("feet")) return "ft" as const;
+    if (unit === "m" || unit.startsWith("mtr") || unit.startsWith("meter")) return "m" as const;
+    if (unit === "ea" || unit.startsWith("each")) return "ea" as const;
+    if (unit.startsWith("length")) return "lengths" as const;
+    if (unit.startsWith("piece")) return "pieces" as const;
+    return "pcs" as const;
+  };
+
+  const qtyLine = text.match(/\b(?:qty|quantity|required|requirement|need)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(lbs?|pounds?|kgs?|kilograms?|lengths?|pcs?|pieces?|ea|each|ft|feet|m|mtrs?|meters?)?\b/i);
   if (qtyLine) {
-    const unit = (qtyLine[2] ?? "").toLowerCase();
-    if (unit.startsWith("lb") || unit.startsWith("pound")) return { quantity: Number(qtyLine[1]), quantityUnit: "lbs" as const };
-    return { quantity: Number(qtyLine[1]), quantityUnit: "pcs" as const };
+    return { quantity: Number(qtyLine[1]), quantityUnit: normalizeQuantityUnit(qtyLine[2]) };
   }
 
   const lbs = text.match(/\b(\d+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
   if (lbs) return { quantity: Number(lbs[1]), quantityUnit: "lbs" as const };
 
-  const lengths = text.match(/\b(\d+(?:\.\d+)?)\s*(?:lengths|pcs?|pieces)\b/i);
-  if (lengths) return { quantity: Number(lengths[1]), quantityUnit: "pcs" as const };
+  const kilograms = text.match(/\b(\d+(?:\.\d+)?)\s*(?:kgs?|kilograms?)\b/i);
+  if (kilograms) return { quantity: Number(kilograms[1]), quantityUnit: "kg" as const };
+
+  const linearFeet = text.match(/\b(\d+(?:\.\d+)?)\s*(?:ft|feet)\b/i);
+  if (linearFeet) return { quantity: Number(linearFeet[1]), quantityUnit: "ft" as const };
+
+  const linearMeters = text.match(/\b(\d+(?:\.\d+)?)\s*(?:mtrs?|meters?)\b/i);
+  if (linearMeters) return { quantity: Number(linearMeters[1]), quantityUnit: "m" as const };
+
+  const lengths = text.match(/\b(\d+(?:\.\d+)?)\s*(?:lengths)\b/i);
+  if (lengths) return { quantity: Number(lengths[1]), quantityUnit: "lengths" as const };
+
+  const pieces = text.match(/\b(\d+(?:\.\d+)?)\s*(pcs?|pieces|ea|each)\b/i);
+  if (pieces) return { quantity: Number(pieces[1]), quantityUnit: normalizeQuantityUnit(pieces[2]) };
 
   const parenMeters = text.match(/\((\d+(?:\.\d+)?)\s*(?:mtrs?|meters?)\)/i);
-  if (parenMeters) return { quantity: Number(parenMeters[1]), quantityUnit: "pcs" as const };
+  if (parenMeters) return { quantity: Number(parenMeters[1]), quantityUnit: "m" as const };
 
   return { quantity: 1, quantityUnit: "pcs" as const };
 };
@@ -351,8 +376,14 @@ const parseBlock = (block: string): ExtractedLineItem => {
     }
   }
 
-  const estimatedWeightLb = thickness && width && length && quantity.quantityUnit === "pcs"
-    ? calcWeightFromGeometry(thickness, width, length, quantity.quantity)
+  const linearLength = quantity.quantityUnit === "ft"
+    ? quantity.quantity * 12
+    : quantity.quantityUnit === "m"
+      ? quantity.quantity * 39.3700787
+      : undefined;
+
+  const estimatedWeightLb = thickness && width && (length || linearLength)
+    ? calcWeightFromGeometry(thickness, width, linearLength ?? length ?? 0, quantity.quantityUnit === "pcs" || quantity.quantityUnit === "pieces" || quantity.quantityUnit === "ea" || quantity.quantityUnit === "lengths" ? quantity.quantity : 1)
     : undefined;
 
   return {
@@ -424,7 +455,9 @@ const normalizeExtracted = (items: ExtractedLineItem[]) => {
       radius: item.radius ?? rawParsed.radius,
       notes: item.notes ?? rawParsed.notes,
       quantity: Math.max(1, Number(item.quantity || rawParsed.quantity || 1)),
-      quantityUnit: item.quantityUnit === "lbs" ? "lbs" : "pcs",
+      quantityUnit: quantityUnits.includes(String(item.quantityUnit ?? "").toLowerCase() as (typeof quantityUnits)[number])
+        ? String(item.quantityUnit).toLowerCase() as (typeof quantityUnits)[number]
+        : rawParsed.quantityUnit,
       rawSpec: item.rawSpec || "",
       estimatedWeightLb: item.estimatedWeightLb
     };
@@ -454,7 +487,7 @@ const normalizeExtracted = (items: ExtractedLineItem[]) => {
       });
     }
 
-    if (!clean.estimatedWeightLb && clean.quantityUnit === "pcs" && clean.thickness && clean.width && clean.length) {
+    if (!clean.estimatedWeightLb && clean.thickness && clean.width && clean.length && ["pcs", "pieces", "ea", "each", "lengths"].includes(clean.quantityUnit)) {
       clean.estimatedWeightLb = calcWeightFromGeometry(clean.thickness, clean.width, clean.length, clean.quantity);
     }
 
@@ -483,7 +516,8 @@ Rules:
 - For PVF items, also extract pressureClass, endType, endTypeSecondary, face, standards, od, id, wall, angle, radius, and notes when present.
 - Distinguish product categories as specifically as possible: pipe, tube, valve, flange, elbow, tee, reducer, cap, coupling, union, nipple, olet, gasket, strainer, and fitting variants.
 - Preserve the exact technical snippet per line item in rawSpec.
-- quantityUnit must be pcs or lbs.
+- quantityUnit must preserve the buyer's requested commercial unit whenever possible, such as pcs, pieces, ea, lengths, lbs, kg, ft, or m.
+- Extract quantity precisely. Distinguish length dimension from requested commercial quantity. For example, "6m length qty 22 lengths" means quantity=22 and quantityUnit=lengths, not meters.
 - If uncertain, keep best-effort values but include rawSpec.
 - Do not include commentary; JSON only.`;
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { QuoteLine } from "@/lib/types";
+import { QuantityUnit, QuoteLine } from "@/lib/types";
 
 type Manufacturer = {
   id: string;
@@ -32,7 +32,7 @@ type SourcingRequest = {
   status: "Open" | "Quoted" | "Closed";
   sourceContext: "quote_shortage" | "inventory_restock";
   reason: "low_stock" | "out_of_stock" | "new_demand";
-  items: Array<{ productType: string; grade: string; quantity: number; unit: "pcs" | "lbs"; dimension?: string }>;
+  items: Array<{ productType: string; grade: string; quantity: number; unit: QuantityUnit; dimension?: string }>;
   notes?: string;
   lastEmailedAt?: string;
   lastEmailSubject?: string;
@@ -48,7 +48,7 @@ type Candidate = {
   grade: string;
   dimension?: string;
   quantity: number;
-  unit: "pcs" | "lbs";
+  unit: QuantityUnit;
   requestedLength?: number;
 };
 

@@ -16,7 +16,7 @@ const cleanItems = (raw: unknown): SourcingRequestItem[] => {
       grade: String(row.grade ?? "").trim().toUpperCase() || "UNKNOWN",
       dimension: String(row.dimension ?? "").trim() || undefined,
       quantity: Math.max(1, Number(row.quantity ?? 1)),
-      unit: String(row.unit ?? "pcs").toLowerCase() === "lbs" ? "lbs" : "pcs",
+      unit: String(row.unit ?? "pcs").trim().toLowerCase() as SourcingRequestItem["unit"],
       requestedLength: Number.isFinite(Number(row.requestedLength)) ? Number(row.requestedLength) : undefined,
       notes: String(row.notes ?? "").trim() || undefined
     } satisfies SourcingRequestItem;

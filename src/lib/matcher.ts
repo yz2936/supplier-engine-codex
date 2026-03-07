@@ -44,7 +44,9 @@ export const findBestMatches = (items: ExtractedLineItem[], inventory: Inventory
 
     const qtyNeeded = requested.quantityUnit === "lbs"
       ? requested.quantity
-      : requested.estimatedWeightLb ?? requested.quantity;
+      : requested.quantityUnit === "kg"
+        ? requested.quantity * 2.20462
+        : requested.estimatedWeightLb ?? requested.quantity;
 
     const onHand = best.item.qtyOnHand;
     const stockStatus = onHand >= qtyNeeded ? "green" : onHand > 0 ? "yellow" : "red";

@@ -13,7 +13,7 @@ import { SourcingHub } from "@/components/SourcingHub";
 import { canGenerateQuotes, canUploadInventory, roleLabel } from "@/lib/auth";
 import { draftQuoteText, money } from "@/lib/format";
 import { extractTextFromRfqFile, RFQ_FILE_ACCEPT } from "@/lib/rfq-file";
-import { QuoteLine, UserRole } from "@/lib/types";
+import { QuantityUnit, QuoteLine, UserRole } from "@/lib/types";
 import { LlmProvider } from "@/lib/llm-provider";
 
 type AppUser = {
@@ -83,7 +83,7 @@ export default function HomePage() {
     grade: string;
     dimension?: string;
     quantity: number;
-    unit: "pcs" | "lbs";
+    unit: QuantityUnit;
     requestedLength?: number;
   } | null>(null);
   const [buyerEmail, setBuyerEmail] = useState("");
