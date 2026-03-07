@@ -36,7 +36,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   const [filterInfo, setFilterInfo] = useState("");
   const [quoteInfo, setQuoteInfo] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [procurementOnly, setProcurementOnly] = useState(false);
+  const [procurementOnly, setProcurementOnly] = useState(true);
   const [filteringMessages, setFilteringMessages] = useState(false);
   const [acceptedInboundIds, setAcceptedInboundIds] = useState<string[]>([]);
   const [manualFilterInfo, setManualFilterInfo] = useState("");
@@ -101,7 +101,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
 
   useEffect(() => {
     if (selectedBuyerId) loadMessages(selectedBuyerId);
-    setProcurementOnly(false);
+    setProcurementOnly(true);
     setAcceptedInboundIds([]);
     setManualFilterInfo("");
   }, [selectedBuyerId, loadMessages]);
@@ -135,6 +135,11 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
       setFilteringMessages(false);
     }
   }, [selectedBuyerId]);
+
+  useEffect(() => {
+    if (!selectedBuyerId || !procurementOnly) return;
+    void applyProcurementFilter();
+  }, [applyProcurementFilter, messages.length, procurementOnly, selectedBuyerId]);
 
   const displayedMessages = procurementOnly
     ? messages.filter((m) => m.direction === "outbound" || acceptedInboundIds.includes(m.id))
@@ -179,7 +184,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
               <div className="text-sm text-steel-700">{selectedBuyer.companyName} · {selectedBuyer.email}</div>
               <div className="flex flex-wrap gap-2">
                 <button className="btn-secondary" disabled={filteringMessages} onClick={() => void applyProcurementFilter()}>
-                  {filteringMessages ? "Filtering..." : "Apply Procurement Filter"}
+                  {filteringMessages ? "Filtering..." : "Refresh Sourcing Filter"}
                 </button>
                 <button
                   className="btn-secondary"
@@ -190,6 +195,15 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                   }}
                 >
                   Show All Messages
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setProcurementOnly(true);
+                    void applyProcurementFilter();
+                  }}
+                >
+                  Show Bid-Ready Only
                 </button>
               </div>
               <div className="max-h-72 space-y-2 overflow-auto rounded border border-steel-200 bg-steel-50 p-2">
