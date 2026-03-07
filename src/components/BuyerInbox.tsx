@@ -43,6 +43,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   const syncInFlightRef = useRef(false);
 
   const selectedBuyer = buyers.find((b) => b.id === selectedBuyerId);
+  const acceptedInboundSet = new Set(acceptedInboundIds);
 
   const loadBuyers = useCallback(async () => {
     const res = await fetch("/api/buyers", { credentials: "include", cache: "no-store" });
@@ -150,15 +151,32 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
       <div className="panel panel-aurora space-y-2">
         <div className="flex items-center justify-between gap-2">
           <div className="font-semibold">Buyer Profiles</div>
-          <button
-            className="btn-secondary"
-            disabled={syncing}
-            onClick={async () => {
-              await syncInbound(false);
-            }}
-          >
-            {syncing ? "Syncing..." : "Sync Inbound Mail"}
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2 text-xs text-steel-700">
+              <span>Inbox Filter</span>
+              <select
+                className="bg-transparent outline-none"
+                value={procurementOnly ? "buying_intent" : "all"}
+                onChange={(e) => {
+                  const next = e.target.value === "buying_intent";
+                  setProcurementOnly(next);
+                  if (next) void applyProcurementFilter();
+                }}
+              >
+                <option value="buying_intent">Buying Intent</option>
+                <option value="all">All Inbound</option>
+              </select>
+            </label>
+            <button
+              className="btn-secondary"
+              disabled={syncing}
+              onClick={async () => {
+                await syncInbound(false);
+              }}
+            >
+              {syncing ? "Syncing..." : "Sync Inbound Mail"}
+            </button>
+          </div>
         </div>
         {buyers.map((b) => (
           <button
@@ -178,7 +196,12 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
 
       <div className="space-y-4">
         <div className="panel panel-aurora space-y-2">
-          <div className="font-semibold">Buyer Conversation</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold">Buyer Conversation</div>
+            <div className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+              ★ Target RFQ / buying intent
+            </div>
+          </div>
           {selectedBuyer ? (
             <>
               <div className="text-sm text-steel-700">{selectedBuyer.companyName} · {selectedBuyer.email}</div>
@@ -186,30 +209,30 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                 <button className="btn-secondary" disabled={filteringMessages} onClick={() => void applyProcurementFilter()}>
                   {filteringMessages ? "Filtering..." : "Refresh Sourcing Filter"}
                 </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setProcurementOnly(false);
-                    setAcceptedInboundIds([]);
-                    setManualFilterInfo("");
-                  }}
-                >
-                  Show All Messages
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setProcurementOnly(true);
-                    void applyProcurementFilter();
-                  }}
-                >
-                  Show Bid-Ready Only
-                </button>
+                <div className="rounded-full border border-steel-200 bg-white px-3 py-2 text-xs text-steel-600">
+                  Showing {procurementOnly ? "buying intent only" : "all inbound and outbound messages"}
+                </div>
               </div>
               <div className="max-h-72 space-y-2 overflow-auto rounded border border-steel-200 bg-steel-50 p-2">
                 {displayedMessages.map((m) => (
-                  <div key={m.id} className={m.direction === "inbound" ? "rounded border border-emerald-200 bg-emerald-50 p-2" : "rounded border border-slate-200 bg-white p-2"}>
-                    <div className="text-xs font-medium">{m.direction.toUpperCase()} · {new Date(m.receivedAt).toLocaleString()}</div>
+                  <div
+                    key={m.id}
+                    className={
+                      m.direction === "inbound"
+                        ? acceptedInboundSet.has(m.id)
+                          ? "rounded border border-amber-300 bg-amber-50 p-2"
+                          : "rounded border border-emerald-200 bg-emerald-50 p-2"
+                        : "rounded border border-slate-200 bg-white p-2"
+                    }
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-medium">{m.direction.toUpperCase()} · {new Date(m.receivedAt).toLocaleString()}</div>
+                      {m.direction === "inbound" && acceptedInboundSet.has(m.id) && (
+                        <div className="rounded-full border border-amber-300 bg-white/90 px-2 py-1 text-[11px] font-medium text-amber-800">
+                          ★ Buying intent
+                        </div>
+                      )}
+                    </div>
                     <div className="text-xs text-steel-700">{m.subject}</div>
                     <div className="mt-1 whitespace-pre-wrap text-sm">{m.bodyText}</div>
                     {m.direction === "inbound" && onStartQuote && (
