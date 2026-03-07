@@ -3,7 +3,13 @@
 import { QuoteLine } from "@/lib/types";
 import { money, standardsLabel, stockColor, stockLabel, summarizeRequestedSpecs } from "@/lib/format";
 
-export function ResultsTable({ lines }: { lines: QuoteLine[] }) {
+export function ResultsTable({
+  lines,
+  onSourceItem
+}: {
+  lines: QuoteLine[];
+  onSourceItem?: (line: QuoteLine) => void;
+}) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -55,6 +61,11 @@ export function ResultsTable({ lines }: { lines: QuoteLine[] }) {
                     <div className="text-[11px] uppercase tracking-wide text-steel-500">Extended</div>
                     <div className="font-semibold text-orange-700">{money(l.extendedPrice)}</div>
                   </div>
+                  {onSourceItem && l.stockStatus === "red" && (
+                    <button className="btn-secondary col-span-2 lg:col-span-1" onClick={() => onSourceItem(l)}>
+                      Source This Item
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

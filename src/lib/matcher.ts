@@ -9,10 +9,15 @@ const dimScore = (requested?: number, candidate?: number, tolerance = 0.02) => {
 
 const scoreItem = (req: ExtractedLineItem, inv: InventoryItem) => {
   let score = 0;
+  const candidateNominal = inv.nominalSize ?? inv.width;
   if (req.category.toLowerCase() === inv.category.toLowerCase()) score += 2;
   else if (categoryFamily(req.category) === categoryFamily(inv.category)) score += 1.25;
   if (dualCertifiedMatch(req.grade, inv.grade)) score += 2;
   if (req.finish && req.finish.toLowerCase() === inv.finish.toLowerCase()) score += 1;
+  if (req.schedule && inv.schedule && req.schedule.toLowerCase() === inv.schedule.toLowerCase()) score += 1;
+  if (req.nominalSize && candidateNominal) score += dimScore(req.nominalSize, candidateNominal, 0.1) * 1.25;
+  if (req.od && inv.width) score += dimScore(req.od, inv.width, 0.08) * 1.2;
+  if (req.wall && inv.thickness) score += dimScore(req.wall, inv.thickness, 0.03) * 1.2;
   score += dimScore(req.thickness, inv.thickness, 0.01);
   score += dimScore(req.width, inv.width, 0.5);
   score += dimScore(req.length, inv.length, 0.5);
@@ -29,7 +34,11 @@ export const findBestMatches = (items: ExtractedLineItem[], inventory: Inventory
     const best = scored[0];
     const alternatives = scored.slice(1, 4).map((s) => s.item);
 
-    if (!best || best.score < 2.5) {
+    const strictThreshold = requested.nominalSize || requested.schedule || requested.pressureClass || requested.endType || requested.od || requested.wall
+      ? 4.2
+      : 3.1;
+
+    if (!best || best.score < strictThreshold) {
       return { requested, stockStatus: "red", score: best?.score ?? 0, alternatives, inventoryItem: undefined };
     }
 

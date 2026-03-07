@@ -67,6 +67,7 @@ type Props = {
   customerName: string;
   quoteLines: QuoteLine[];
   initialInventorySeed?: InventorySeed;
+  initialQuoteSeed?: Candidate;
   onSeedConsumed?: () => void;
 };
 
@@ -75,7 +76,7 @@ const sortManufacturers = (list: Manufacturer[]) => [...list].sort((a, b) => {
   return a.preferred ? -1 : 1;
 });
 
-export function SourcingHub({ customerName, quoteLines, initialInventorySeed, onSeedConsumed }: Props) {
+export function SourcingHub({ customerName, quoteLines, initialInventorySeed, initialQuoteSeed, onSeedConsumed }: Props) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [requests, setRequests] = useState<SourcingRequest[]>([]);
@@ -186,6 +187,21 @@ export function SourcingHub({ customerName, quoteLines, initialInventorySeed, on
     setStatus(`Loaded ${initialInventorySeed.sku} into sourcing candidates.`);
     onSeedConsumed?.();
   }, [initialInventorySeed, onSeedConsumed]);
+
+  useEffect(() => {
+    if (!initialQuoteSeed) return;
+
+    setManualCandidates((prev) => {
+      const next = prev.filter((c) => c.key !== initialQuoteSeed.key);
+      next.push(initialQuoteSeed);
+      return next;
+    });
+
+    setCandidateFilter("quote_shortage");
+    setSelectedKeys((prev) => ({ ...prev, [initialQuoteSeed.key]: true }));
+    setStatus(`Loaded ${initialQuoteSeed.productType} into sourcing candidates.`);
+    onSeedConsumed?.();
+  }, [initialQuoteSeed, onSeedConsumed]);
 
   const candidates = useMemo(() => {
     const byKey = new Map<string, Candidate>();

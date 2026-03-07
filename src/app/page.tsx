@@ -70,6 +70,18 @@ export default function HomePage() {
     schedule?: string;
     qtyOnHand: number;
   } | null>(null);
+  const [sourcingQuoteSeed, setSourcingQuoteSeed] = useState<{
+    key: string;
+    sourceContext: "quote_shortage";
+    reason: "low_stock" | "out_of_stock" | "new_demand";
+    sku?: string;
+    productType: string;
+    grade: string;
+    dimension?: string;
+    quantity: number;
+    unit: "pcs" | "lbs";
+    requestedLength?: number;
+  } | null>(null);
   const [buyerEmail, setBuyerEmail] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [draftSubject, setDraftSubject] = useState("Quotation");
@@ -809,7 +821,25 @@ export default function HomePage() {
                         <div className="text-xs text-steel-600">Focus on category, pressure class, end prep, standards, and dimensions before sending.</div>
                       </div>
                     </div>
-                    <ResultsTable lines={lines} />
+                    <ResultsTable
+                      lines={lines}
+                      onSourceItem={(line) => {
+                        setSourcingSeed(null);
+                        setSourcingQuoteSeed({
+                          key: `manual-${line.sku ?? line.description}-${Date.now()}`,
+                          sourceContext: "quote_shortage",
+                          reason: line.stockStatus === "yellow" ? "low_stock" : "out_of_stock",
+                          sku: line.sku,
+                          productType: line.requested.category,
+                          grade: line.requested.grade,
+                          dimension: line.requested.dimensionSummary || line.requested.rawSpec,
+                          quantity: line.quantity,
+                          unit: line.unit,
+                          requestedLength: line.requested.length
+                        });
+                        setActiveView("sourcing");
+                      }}
+                    />
                   </div>
                 </section>
 
@@ -909,6 +939,7 @@ export default function HomePage() {
               <InventoryCatalogManager
                 editable={canUploadInventory(role)}
                 onSourceLine={(seed) => {
+                  setSourcingQuoteSeed(null);
                   setSourcingSeed(seed);
                   setActiveView("sourcing");
                 }}
@@ -921,7 +952,11 @@ export default function HomePage() {
               customerName={customerName}
               quoteLines={lines}
               initialInventorySeed={sourcingSeed ?? undefined}
-              onSeedConsumed={() => setSourcingSeed(null)}
+              initialQuoteSeed={sourcingQuoteSeed ?? undefined}
+              onSeedConsumed={() => {
+                setSourcingSeed(null);
+                setSourcingQuoteSeed(null);
+              }}
             />
           )}
 
