@@ -28,7 +28,7 @@ type AppUser = {
   createdAt: string;
 };
 
-type View = "dashboard" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
+type View = "dashboard" | "quote_desk" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
 type AgentStage = "idle" | "validating" | "parsing" | "awaiting_approval" | "ready";
 type AgentActivity = {
   id: number;
@@ -134,6 +134,14 @@ export default function HomePage() {
         </svg>
       );
     }
+    if (view === "quote_desk") {
+      return (
+        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M4 5h12v8H8l-4 3V5z" />
+          <path d="M7 8h6M7 11h4" />
+        </svg>
+      );
+    }
     if (view === "inventory") {
       return (
         <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -177,6 +185,7 @@ export default function HomePage() {
   };
   const viewMeta: Record<View, { label: string; hint: string }> = {
     dashboard: { label: "Dashboard", hint: "Inbound, inventory, and supplier health at a glance" },
+    quote_desk: { label: "Quote Desk", hint: "Conversation-first quoting with approvals and audit trail" },
     workspace: { label: "Workspace", hint: "RFQ parsing, pricing, and quote delivery" },
     inventory: { label: "Inventory", hint: "Stock control and row-level updates" },
     sourcing: { label: "Sourcing", hint: "Route shortages to upstream suppliers" },
@@ -859,6 +868,7 @@ export default function HomePage() {
             {!sidebarCollapsed && <div className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">Navigation</div>}
             {([
               "dashboard",
+              "quote_desk",
               "workspace",
               "inventory",
               "sourcing",
@@ -942,10 +952,11 @@ export default function HomePage() {
           </header>
 
           {activeView === "dashboard" && (
-            <div className="space-y-4">
-              <ConversationQuoteDesk onOpenWorkspace={() => setActiveView("workspace")} />
-              <DashboardOverview onNavigateView={setActiveView} />
-            </div>
+            <DashboardOverview onNavigateView={setActiveView} />
+          )}
+
+          {activeView === "quote_desk" && (
+            <ConversationQuoteDesk onOpenWorkspace={() => setActiveView("workspace")} />
           )}
 
           {activeView === "workspace" && (

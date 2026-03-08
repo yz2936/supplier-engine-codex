@@ -15,7 +15,7 @@ type ChatAction =
 type Message = { role: "user" | "assistant"; content: string };
 
 type Props = {
-  activeView: "dashboard" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
+  activeView: "dashboard" | "quote_desk" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
   role: UserRole;
   canGenerate: boolean;
   canUpload: boolean;
@@ -32,7 +32,7 @@ type Props = {
   };
   onApplyActions: (actions: ChatAction[]) => Promise<void>;
   onUploadInventoryFile: (file: File) => Promise<string>;
-  onNavigateView?: (view: "dashboard" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings") => void;
+  onNavigateView?: (view: "dashboard" | "quote_desk" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings") => void;
   onRefreshInventory?: () => Promise<void>;
 };
 
@@ -257,7 +257,7 @@ export function AIChatPanel({
               <button className="btn-secondary" onClick={() => onNavigateView?.("quotes")}>Open Quotes</button>
             </>
           )}
-          {(activeView === "dashboard" || activeView === "quotes" || activeView === "settings") && (
+          {(activeView === "dashboard" || activeView === "quote_desk" || activeView === "quotes" || activeView === "settings") && (
             <>
               <button className="btn-secondary" onClick={() => onNavigateView?.("workspace")}>Open Workspace</button>
               <button className="btn-secondary" onClick={() => onNavigateView?.("inventory")}>Open Inventory</button>

@@ -19,6 +19,15 @@ const starterPrompts = [
   "Change the lead time to 8 weeks."
 ];
 
+const stageLabels = [
+  { key: "email_selected", label: "Email" },
+  { key: "rfq_parsed", label: "Parse" },
+  { key: "inventory_checked", label: "Inventory" },
+  { key: "draft_ready", label: "Draft" },
+  { key: "awaiting_approval", label: "Approval" },
+  { key: "sent", label: "Sent" }
+] as const;
+
 export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
   const [sessions, setSessions] = useState<QuoteAgentSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
@@ -245,7 +254,7 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
   return (
     <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_320px]">
         <div className="panel-industrial flex min-h-[760px] flex-col gap-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -272,6 +281,37 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
                 Start by asking the agent to quote the latest buyer email.
               </div>
             )}
+            {activeSession && (
+              <div className="landing-card space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="section-title">Workflow progress</div>
+                    <div className="mt-1 text-lg font-semibold text-steel-900">{activeSession.title}</div>
+                  </div>
+                  <div className="status-chip status-chip-steel">{activeSession.status}</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {stageLabels.map((stage) => {
+                    const isActive = activeSession.stage === stage.key;
+                    const isCompleted = stageLabels.findIndex((item) => item.key === activeSession.stage) >= stageLabels.findIndex((item) => item.key === stage.key);
+                    return (
+                      <div
+                        key={stage.key}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${
+                          isActive
+                            ? "border-orange-300 bg-orange-50 text-orange-800"
+                            : isCompleted
+                              ? "border-teal-200 bg-teal-50 text-teal-800"
+                              : "border-steel-200 bg-white text-steel-500"
+                        }`}
+                      >
+                        {stage.label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {activeSession?.messages.map((message) => (
               <div
                 key={message.id}
@@ -285,6 +325,7 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
                 <div className="text-steel-800">{message.content}</div>
               </div>
             ))}
+            {activeSession?.cards.map(renderCard)}
             <div ref={endRef} />
           </div>
 
@@ -309,16 +350,22 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
         <div className="space-y-4">
           <div className="landing-card">
-            <div className="section-title">Workflow status</div>
-            <div className="mt-2 text-lg font-semibold text-steel-900">{activeSession?.title || "No active quote session"}</div>
-            <div className="mt-2 text-sm text-steel-600">
-              {activeSession
-                ? `${activeSession.status} · ${activeSession.stage}`
-                : "Create a session from chat to begin email-to-quote orchestration."}
+            <div className="section-title">Quote sessions</div>
+            <div className="mt-3 space-y-2">
+              {sessions.length ? sessions.map((session) => (
+                <button
+                  key={session.id}
+                  className={activeSession?.id === session.id
+                    ? "w-full rounded-2xl border border-orange-300 bg-orange-50/70 px-3 py-3 text-left"
+                    : "w-full rounded-2xl border border-steel-200 bg-white/75 px-3 py-3 text-left"}
+                  onClick={() => setActiveSessionId(session.id)}
+                >
+                  <div className="font-medium text-steel-900">{session.title}</div>
+                  <div className="mt-1 text-xs text-steel-600">{session.status} · {new Date(session.updatedAt).toLocaleString()}</div>
+                </button>
+              )) : <div className="text-sm text-steel-600">No quote sessions yet.</div>}
             </div>
           </div>
-
-          {activeSession?.cards.map(renderCard)}
 
           <div className="landing-card">
             <div className="section-title">Activity timeline</div>
