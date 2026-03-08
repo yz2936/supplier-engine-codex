@@ -1,9 +1,11 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import net from "node:net";
+import tls from "node:tls";
 import { AppData, AppUser } from "@/lib/types";
 import { extractEmailAddress, findManagerForInbound, upsertBuyerProfile } from "@/lib/buyer-routing";
 import { filterInboundEmail } from "@/lib/inbound-filter";
-import { getImapConfigForUser } from "@/lib/user-email-config";
+import { getImapConfigForUser, getPopConfigForUser } from "@/lib/user-email-config";
 
 type SyncResult = {
   scanned: number;
@@ -12,6 +14,14 @@ type SyncResult = {
 };
 
 const isCertChainError = (message: string) => /self[-\s]signed certificate|certificate chain/i.test(message);
+
+type PopConfig = {
+  host: string;
+  port: number;
+  secure: boolean;
+  auth: { user: string; pass: string };
+  rejectUnauthorized: boolean;
+};
 
 const textFromParsed = (parsed: Awaited<ReturnType<typeof simpleParser>>) => {
   const text = parsed.text?.trim();
@@ -68,6 +78,144 @@ const createClient = (
     logger: false
   });
 };
+
+class Pop3Client {
+  private socket: net.Socket | tls.TLSSocket | null = null;
+  private buffer = "";
+  private pending = Promise.resolve();
+
+  constructor(private readonly cfg: PopConfig, private readonly rejectUnauthorized: boolean) {}
+
+  async connect() {
+    const socket = this.cfg.secure
+      ? tls.connect({
+        host: this.cfg.host,
+        port: this.cfg.port,
+        rejectUnauthorized: this.rejectUnauthorized
+      })
+      : net.connect({
+        host: this.cfg.host,
+        port: this.cfg.port
+      });
+
+    this.socket = socket;
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      this.buffer += chunk;
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once("error", reject);
+      socket.once("connect", () => resolve());
+      if (this.cfg.secure) {
+        socket.once("secureConnect", () => resolve());
+      }
+    });
+
+    await this.readLine();
+  }
+
+  private async waitForData() {
+    await new Promise<void>((resolve, reject) => {
+      const socket = this.socket;
+      if (!socket) return reject(new Error("POP socket is not connected"));
+      const onData = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      const cleanup = () => {
+        socket.off("data", onData);
+        socket.off("error", onError);
+      };
+      socket.on("data", onData);
+      socket.once("error", onError);
+    });
+  }
+
+  private async readLine() {
+    while (!this.buffer.includes("\r\n")) {
+      await this.waitForData();
+    }
+    const index = this.buffer.indexOf("\r\n");
+    const line = this.buffer.slice(0, index);
+    this.buffer = this.buffer.slice(index + 2);
+    return line;
+  }
+
+  private async readMultiline() {
+    let payload = "";
+    while (!payload.includes("\r\n.\r\n")) {
+      await this.waitForData();
+      payload += this.buffer;
+      this.buffer = "";
+    }
+    const endIndex = payload.indexOf("\r\n.\r\n");
+    const content = payload.slice(0, endIndex);
+    const remainder = payload.slice(endIndex + 5);
+    this.buffer = remainder + this.buffer;
+    return content
+      .split("\r\n")
+      .map((line) => line.startsWith("..") ? line.slice(1) : line)
+      .join("\r\n");
+  }
+
+  private async enqueue<T>(task: () => Promise<T>) {
+    const run = this.pending.then(task, task);
+    this.pending = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  async command(command: string, multiline = false) {
+    return this.enqueue(async () => {
+      const socket = this.socket;
+      if (!socket) throw new Error("POP socket is not connected");
+      socket.write(`${command}\r\n`);
+      const line = await this.readLine();
+      if (!line.startsWith("+OK")) throw new Error(line || `POP command failed: ${command}`);
+      if (!multiline) return line;
+      return this.readMultiline();
+    });
+  }
+
+  async login() {
+    await this.command(`USER ${this.cfg.auth.user}`);
+    await this.command(`PASS ${this.cfg.auth.pass}`);
+  }
+
+  async listUids() {
+    const data = await this.command("UIDL", true);
+    return data
+      .split("\r\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [messageNumber, uid] = line.split(/\s+/, 2);
+        return { messageNumber: Number(messageNumber), uid: uid || `msg-${messageNumber}` };
+      })
+      .filter((item) => Number.isFinite(item.messageNumber) && item.messageNumber > 0);
+  }
+
+  async retrieve(messageNumber: number) {
+    const data = await this.command(`RETR ${messageNumber}`, true);
+    return Buffer.from(data, "utf8");
+  }
+
+  async quit() {
+    if (!this.socket) return;
+    try {
+      await this.command("QUIT");
+    } catch {
+      // noop
+    } finally {
+      this.socket.destroy();
+      this.socket = null;
+    }
+  }
+}
 
 const syncWithClient = async (
   client: ImapFlow,
@@ -163,23 +311,125 @@ const syncWithClient = async (
   return { scanned, created, skipped };
 };
 
+const syncWithPopClient = async (
+  client: Pop3Client,
+  data: AppData,
+  fallbackManager: AppUser,
+  cfg: PopConfig,
+  limit: number,
+  forceCurrentManager: boolean
+): Promise<SyncResult> => {
+  let scanned = 0;
+  let created = 0;
+  let skipped = 0;
+  const inboxAddress = extractEmailAddress(process.env.INBOUND_ROUTE_ADDRESS?.trim() || cfg.auth.user);
+
+  await client.connect();
+  await client.login();
+  const uids = await client.listUids();
+  const newest = uids.slice(Math.max(0, uids.length - Math.max(1, limit)));
+
+  for (const item of newest) {
+    scanned += 1;
+    const sourceMessageId = item.uid || `pop-${item.messageNumber}`;
+    const alreadyStored = data.buyerMessages.some((m) => m.sourceMessageId && m.sourceMessageId === sourceMessageId);
+    if (alreadyStored) {
+      skipped += 1;
+      continue;
+    }
+
+    const source = await client.retrieve(item.messageNumber);
+    const parsed = await simpleParser(source);
+    const from = addressText(parsed.from).trim();
+    const to = addressText(parsed.to).trim() || cfg.auth.user;
+    const subject = (parsed.subject || "Buyer Reply").trim();
+    const bodyText = textFromParsed(parsed);
+    const fromEmail = extractEmailAddress(from);
+    const toEmail = extractEmailAddress(to || cfg.auth.user);
+    const receivedAtSource = parsed.date || new Date();
+    const receivedAt = receivedAtSource instanceof Date
+      ? receivedAtSource.toISOString()
+      : new Date(receivedAtSource).toISOString();
+
+    if (!fromEmail || !bodyText) {
+      skipped += 1;
+      continue;
+    }
+
+    const decision = await filterInboundEmail(subject, bodyText);
+    if (!decision.accept) {
+      skipped += 1;
+      continue;
+    }
+    if (fromEmail === inboxAddress || fromEmail === extractEmailAddress(cfg.auth.user)) {
+      skipped += 1;
+      continue;
+    }
+
+    const manager = resolveManager(data, fallbackManager, toEmail || inboxAddress, subject, forceCurrentManager);
+    const buyer = upsertBuyerProfile(data, manager.id, from);
+    data.buyerMessages.push({
+      id: crypto.randomUUID(),
+      sourceMessageId,
+      buyerId: buyer.id,
+      managerUserId: manager.id,
+      direction: "inbound",
+      subject,
+      bodyText,
+      fromEmail,
+      toEmail: toEmail || inboxAddress,
+      receivedAt
+    });
+    buyer.status = "Active";
+    buyer.lastInteractionAt = new Date().toISOString();
+    buyer.updatedAt = new Date().toISOString();
+    created += 1;
+  }
+
+  return { scanned, created, skipped };
+};
+
 export const syncInboundMailboxForManager = async (
   data: AppData,
   fallbackManager: AppUser,
   limit = 25,
   forceCurrentManager = true
 ): Promise<SyncResult> => {
-  const cfg = getImapConfigForUser(data, fallbackManager.id);
+  const inboundProtocol = data.users.find((u) => u.id === fallbackManager.id)?.emailSettings?.inboundProtocol || "imap";
+  const imapCfg = inboundProtocol === "imap" ? getImapConfigForUser(data, fallbackManager.id) : null;
+  const popCfg = inboundProtocol === "pop" ? getPopConfigForUser(data, fallbackManager.id) : null;
+  const cfg = inboundProtocol === "pop" ? popCfg : imapCfg;
   if (!cfg?.auth?.user || !cfg?.auth?.pass) {
     throw new Error(
-      "Inbound mailbox is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account."
+      "Inbound mailbox is not configured. Go to Settings -> Email Integration and connect your SMTP plus IMAP or POP account."
     );
   }
 
   const runSync = async (rejectUnauthorized: boolean) => {
-    const client = createClient(cfg, rejectUnauthorized);
+    if (inboundProtocol === "pop") {
+      const client = new Pop3Client(cfg as PopConfig, rejectUnauthorized);
+      try {
+        return await syncWithPopClient(client, data, fallbackManager, cfg as PopConfig, limit, forceCurrentManager);
+      } finally {
+        await client.quit().catch(() => undefined);
+      }
+    }
+
+    const client = createClient(cfg as {
+      host: string;
+      port: number;
+      secure: boolean;
+      auth: { user: string; pass: string };
+      rejectUnauthorized: boolean;
+    }, rejectUnauthorized);
     try {
-      return await syncWithClient(client, data, fallbackManager, cfg, limit, forceCurrentManager);
+      return await syncWithClient(client, data, fallbackManager, cfg as {
+        host: string;
+        port: number;
+        secure: boolean;
+        auth: { user: string; pass: string };
+        rejectUnauthorized: boolean;
+      }, limit, forceCurrentManager);
     } finally {
       await client.logout().catch(() => undefined);
     }
@@ -194,7 +444,7 @@ export const syncInboundMailboxForManager = async (
     }
     if (isCertChainError(message)) {
       throw new Error(
-        "Inbound mailbox TLS validation failed. Set IMAP_ALLOW_SELF_SIGNED=true if your mail provider uses a custom certificate chain."
+        `Inbound ${inboundProtocol.toUpperCase()} mailbox TLS validation failed. Allow self-signed certificates only if your mail provider uses a custom certificate chain.`
       );
     }
     throw err;

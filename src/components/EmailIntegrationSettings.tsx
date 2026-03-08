@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type EmailSettingsResponse = {
   configured?: boolean;
   updatedAt?: string;
+  inboundProtocol?: "imap" | "pop";
   smtp?: {
     host: string;
     port: number;
@@ -13,6 +14,13 @@ type EmailSettingsResponse = {
     from?: string;
   } | null;
   imap?: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    rejectUnauthorized?: boolean;
+  } | null;
+  pop?: {
     host: string;
     port: number;
     secure: boolean;
@@ -32,12 +40,19 @@ export function EmailIntegrationSettings() {
   const [smtpPass, setSmtpPass] = useState("");
   const [smtpFrom, setSmtpFrom] = useState("");
   const [useSmtpForImap, setUseSmtpForImap] = useState(true);
+  const [inboundProtocol, setInboundProtocol] = useState<"imap" | "pop">("imap");
   const [imapHost, setImapHost] = useState("imap.gmail.com");
   const [imapPort, setImapPort] = useState(993);
   const [imapSecure, setImapSecure] = useState(true);
   const [imapUser, setImapUser] = useState("");
   const [imapPass, setImapPass] = useState("");
   const [imapRejectUnauthorized, setImapRejectUnauthorized] = useState(true);
+  const [popHost, setPopHost] = useState("");
+  const [popPort, setPopPort] = useState(995);
+  const [popSecure, setPopSecure] = useState(true);
+  const [popUser, setPopUser] = useState("");
+  const [popPass, setPopPass] = useState("");
+  const [popRejectUnauthorized, setPopRejectUnauthorized] = useState(true);
   const [configuredAt, setConfiguredAt] = useState<string>("");
 
   useEffect(() => {
@@ -49,6 +64,7 @@ export function EmailIntegrationSettings() {
         const json = await res.json().catch(() => ({} as { settings?: EmailSettingsResponse; error?: string }));
         if (!res.ok) throw new Error(json.error || "Failed to load email settings");
         const settings = (json.settings || {}) as EmailSettingsResponse;
+        setInboundProtocol(settings.inboundProtocol === "pop" ? "pop" : "imap");
         if (settings.smtp) {
           setSmtpHost(settings.smtp.host || "smtp.gmail.com");
           setSmtpPort(settings.smtp.port || 587);
@@ -63,6 +79,13 @@ export function EmailIntegrationSettings() {
           setImapSecure(Boolean(settings.imap.secure));
           setImapUser(settings.imap.user || "");
           setImapRejectUnauthorized(settings.imap.rejectUnauthorized ?? true);
+        }
+        if (settings.pop) {
+          setPopHost(settings.pop.host || "");
+          setPopPort(settings.pop.port || 995);
+          setPopSecure(Boolean(settings.pop.secure));
+          setPopUser(settings.pop.user || "");
+          setPopRejectUnauthorized(settings.pop.rejectUnauthorized ?? true);
         }
         if (settings.updatedAt) setConfiguredAt(settings.updatedAt);
       } catch (err) {
@@ -84,7 +107,7 @@ export function EmailIntegrationSettings() {
       </div>
 
       <p className="text-xs text-steel-600">
-        Add your own SMTP/IMAP account once. Outbound quote/sourcing emails and inbound buyer sync will use these credentials.
+        Add your own SMTP account once. Inbound buyer sync can use either IMAP or POP to match how industrial mailboxes are configured in the real world.
       </p>
 
       {loading ? (
@@ -103,12 +126,24 @@ export function EmailIntegrationSettings() {
             <input className="input md:col-span-2" placeholder="From address (optional)" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
           </div>
 
-          <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2">
-            <input type="checkbox" checked={useSmtpForImap} onChange={(e) => setUseSmtpForImap(e.target.checked)} />
-            <span>Use same account for inbound IMAP</span>
-          </label>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2">
+              <span className="text-steel-700">Inbound protocol</span>
+              <select className="input ml-auto max-w-[160px]" value={inboundProtocol} onChange={(e) => setInboundProtocol(e.target.value as "imap" | "pop")}>
+                <option value="imap">IMAP</option>
+                <option value="pop">POP</option>
+              </select>
+            </label>
 
-          {!useSmtpForImap && (
+            {inboundProtocol === "imap" && (
+              <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2">
+                <input type="checkbox" checked={useSmtpForImap} onChange={(e) => setUseSmtpForImap(e.target.checked)} />
+                <span>Use same account for inbound IMAP</span>
+              </label>
+            )}
+          </div>
+
+          {inboundProtocol === "imap" && !useSmtpForImap && (
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <input className="input" placeholder="IMAP host" value={imapHost} onChange={(e) => setImapHost(e.target.value)} />
               <input className="input" type="number" placeholder="IMAP port" value={imapPort} onChange={(e) => setImapPort(Number(e.target.value || 993))} />
@@ -120,6 +155,23 @@ export function EmailIntegrationSettings() {
               <input className="input md:col-span-2" placeholder="IMAP app password (leave blank to keep existing)" type="password" value={imapPass} onChange={(e) => setImapPass(e.target.value)} />
               <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2 md:col-span-2">
                 <input type="checkbox" checked={imapRejectUnauthorized} onChange={(e) => setImapRejectUnauthorized(e.target.checked)} />
+                <span>Reject unauthorized TLS certificates</span>
+              </label>
+            </div>
+          )}
+
+          {inboundProtocol === "pop" && (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <input className="input" placeholder="POP host" value={popHost} onChange={(e) => setPopHost(e.target.value)} />
+              <input className="input" type="number" placeholder="POP port" value={popPort} onChange={(e) => setPopPort(Number(e.target.value || 995))} />
+              <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2">
+                <input type="checkbox" checked={popSecure} onChange={(e) => setPopSecure(e.target.checked)} />
+                <span>POP secure (SSL/TLS)</span>
+              </label>
+              <input className="input" placeholder="POP login email" value={popUser} onChange={(e) => setPopUser(e.target.value)} />
+              <input className="input md:col-span-2" placeholder="POP password (leave blank to keep existing)" type="password" value={popPass} onChange={(e) => setPopPass(e.target.value)} />
+              <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2 md:col-span-2">
+                <input type="checkbox" checked={popRejectUnauthorized} onChange={(e) => setPopRejectUnauthorized(e.target.checked)} />
                 <span>Reject unauthorized TLS certificates</span>
               </label>
             </div>
@@ -146,6 +198,7 @@ export function EmailIntegrationSettings() {
                         pass: smtpPass,
                         from: smtpFrom
                       },
+                      inboundProtocol,
                       useSmtpForImap,
                       imap: useSmtpForImap
                         ? undefined
@@ -156,7 +209,17 @@ export function EmailIntegrationSettings() {
                           user: imapUser,
                           pass: imapPass,
                           rejectUnauthorized: imapRejectUnauthorized
+                        },
+                      pop: inboundProtocol === "pop"
+                        ? {
+                          host: popHost,
+                          port: popPort,
+                          secure: popSecure,
+                          user: popUser,
+                          pass: popPass,
+                          rejectUnauthorized: popRejectUnauthorized
                         }
+                        : undefined
                     })
                   });
                   const json = await res.json().catch(() => ({} as { error?: string; settings?: EmailSettingsResponse }));
@@ -164,6 +227,7 @@ export function EmailIntegrationSettings() {
                   setConfiguredAt(json.settings?.updatedAt || new Date().toISOString());
                   setSmtpPass("");
                   setImapPass("");
+                  setPopPass("");
                   setStatus("Email integration saved. You can now send and sync using this account.");
                 } catch (err) {
                   setStatus(err instanceof Error ? err.message : "Failed to save email settings");

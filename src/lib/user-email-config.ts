@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { AppData, AppUser, UserEmailImapSettings, UserEmailSettings, UserEmailSmtpSettings } from "@/lib/types";
+import { AppData, AppUser, UserEmailImapSettings, UserEmailPopSettings, UserEmailSettings, UserEmailSmtpSettings } from "@/lib/types";
 
 const EMAIL_SECRET = process.env.EMAIL_CREDENTIAL_SECRET?.trim()
   || process.env.SESSION_SECRET?.trim()
@@ -75,6 +75,23 @@ const imapFromEnv = () => {
   };
 };
 
+const popFromEnv = () => {
+  const smtpHost = process.env.SMTP_HOST?.trim();
+  const host = process.env.POP_HOST?.trim()
+    || (process.env.POP_USER || process.env.POP_PASS ? inferImapHostFromSmtp(smtpHost).replace(/^imap\./, "pop.") : "")
+    || "";
+  const user = process.env.POP_USER?.trim() || process.env.SMTP_USER?.trim() || "";
+  const pass = (process.env.POP_PASS || process.env.SMTP_PASS || "").replace(/\s+/g, "");
+  if (!host || !user || !pass) return null;
+  return {
+    host,
+    port: Number(process.env.POP_PORT || 995),
+    secure: String(process.env.POP_SECURE || "true").toLowerCase() === "true",
+    auth: { user, pass },
+    rejectUnauthorized: isTrue(process.env.POP_TLS_REJECT_UNAUTHORIZED, !isTrue(process.env.POP_ALLOW_SELF_SIGNED, false))
+  };
+};
+
 export const getSmtpConfigForUser = (data: AppData, userId: string) => {
   const user = data.users.find((u) => u.id === userId);
   const smtp = user?.emailSettings?.smtp;
@@ -111,10 +128,29 @@ export const getImapConfigForUser = (data: AppData, userId: string) => {
   return imapFromEnv();
 };
 
+export const getPopConfigForUser = (data: AppData, userId: string) => {
+  const user = data.users.find((u) => u.id === userId);
+  const pop = user?.emailSettings?.pop;
+  if (pop?.host && pop.user && pop.passEncrypted) {
+    return {
+      host: pop.host,
+      port: Number(pop.port || 995),
+      secure: Boolean(pop.secure),
+      auth: {
+        user: pop.user.trim(),
+        pass: decryptSecret(pop.passEncrypted)
+      },
+      rejectUnauthorized: pop.rejectUnauthorized ?? true
+    };
+  }
+  return popFromEnv();
+};
+
 export const sanitizeUserEmailSettingsForApi = (settings?: UserEmailSettings) => {
   return {
-    configured: Boolean(settings?.smtp?.host || settings?.imap?.host),
+    configured: Boolean(settings?.smtp?.host || settings?.imap?.host || settings?.pop?.host),
     updatedAt: settings?.updatedAt,
+    inboundProtocol: settings?.inboundProtocol || (settings?.pop ? "pop" : "imap"),
     smtp: settings?.smtp
       ? {
         host: settings.smtp.host,
@@ -132,6 +168,15 @@ export const sanitizeUserEmailSettingsForApi = (settings?: UserEmailSettings) =>
         user: settings.imap.user,
         rejectUnauthorized: settings.imap.rejectUnauthorized
       }
+      : null,
+    pop: settings?.pop
+      ? {
+        host: settings.pop.host,
+        port: settings.pop.port,
+        secure: settings.pop.secure,
+        user: settings.pop.user,
+        rejectUnauthorized: settings.pop.rejectUnauthorized
+      }
       : null
   };
 };
@@ -145,6 +190,14 @@ const withSmtp = (current: UserEmailSettings | undefined, smtp: UserEmailSmtpSet
 const withImap = (current: UserEmailSettings | undefined, imap: UserEmailImapSettings) => ({
   ...(current || { updatedAt: new Date().toISOString() }),
   imap,
+  inboundProtocol: "imap" as const,
+  updatedAt: new Date().toISOString()
+});
+
+const withPop = (current: UserEmailSettings | undefined, pop: UserEmailPopSettings) => ({
+  ...(current || { updatedAt: new Date().toISOString() }),
+  pop,
+  inboundProtocol: "pop" as const,
   updatedAt: new Date().toISOString()
 });
 
@@ -153,6 +206,8 @@ export const saveUserEmailSettings = (
   payload: {
     smtp: { host: string; port: number; secure: boolean; user: string; pass?: string; from?: string };
     imap?: { host: string; port: number; secure: boolean; user: string; pass?: string; rejectUnauthorized?: boolean };
+    pop?: { host: string; port: number; secure: boolean; user: string; pass?: string; rejectUnauthorized?: boolean };
+    inboundProtocol?: "imap" | "pop";
   }
 ) => {
   const nextSmtp: UserEmailSmtpSettings = {
@@ -167,6 +222,21 @@ export const saveUserEmailSettings = (
   };
 
   const nextSettings = withSmtp(user.emailSettings, nextSmtp);
+
+  if (payload.inboundProtocol === "pop" && payload.pop) {
+    const nextPop: UserEmailPopSettings = {
+      host: payload.pop.host.trim(),
+      port: Number(payload.pop.port || 995),
+      secure: Boolean(payload.pop.secure),
+      user: payload.pop.user.trim().toLowerCase(),
+      passEncrypted: payload.pop.pass
+        ? encryptSecret(payload.pop.pass)
+        : (user.emailSettings?.pop?.passEncrypted || ""),
+      rejectUnauthorized: payload.pop.rejectUnauthorized ?? true
+    };
+    user.emailSettings = withPop(nextSettings, nextPop);
+    return;
+  }
 
   if (payload.imap) {
     const nextImap: UserEmailImapSettings = {
@@ -183,5 +253,5 @@ export const saveUserEmailSettings = (
     return;
   }
 
-  user.emailSettings = nextSettings;
+  user.emailSettings = { ...nextSettings, inboundProtocol: user.emailSettings?.inboundProtocol || "imap" };
 };

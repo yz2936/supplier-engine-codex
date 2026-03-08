@@ -350,8 +350,19 @@ export type UserEmailImapSettings = {
   rejectUnauthorized?: boolean;
 };
 
+export type UserEmailPopSettings = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  passEncrypted: string;
+  rejectUnauthorized?: boolean;
+};
+
 export type UserEmailSettings = {
   smtp?: UserEmailSmtpSettings;
   imap?: UserEmailImapSettings;
+  pop?: UserEmailPopSettings;
+  inboundProtocol?: "imap" | "pop";
   updatedAt: string;
 };

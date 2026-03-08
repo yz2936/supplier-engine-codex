@@ -39,6 +39,7 @@ const formatTime = (value?: string) => value ? new Date(value).toLocaleString() 
 export function ConversationQuoteDesk() {
   const [sessions, setSessions] = useState<QuoteAgentSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
+  const [isNewWorkflow, setIsNewWorkflow] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -46,10 +47,11 @@ export function ConversationQuoteDesk() {
   const [pendingMargin, setPendingMargin] = useState(12);
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  const activeSession = useMemo(
-    () => sessions.find((session) => session.id === activeSessionId) || sessions[0] || null,
-    [activeSessionId, sessions]
-  );
+  const activeSession = useMemo(() => {
+    if (isNewWorkflow) return null;
+    if (activeSessionId) return sessions.find((session) => session.id === activeSessionId) || null;
+    return sessions[0] || null;
+  }, [activeSessionId, isNewWorkflow, sessions]);
 
   useEffect(() => {
     setPendingMargin(activeSession?.marginPercent ?? 12);
@@ -61,6 +63,7 @@ export function ConversationQuoteDesk() {
       if (!existing) return [next, ...prev];
       return prev.map((session) => session.id === next.id ? next : session);
     });
+    setIsNewWorkflow(false);
     setActiveSessionId(next.id);
     if (next.approval?.status === "pending") setApprovalModal(next.approval);
     else setApprovalModal(null);
@@ -71,7 +74,10 @@ export function ConversationQuoteDesk() {
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to load quote sessions");
     setSessions(json.sessions || []);
-    if (json.sessions?.[0]?.id) setActiveSessionId((current: string) => current || json.sessions[0].id);
+    if (json.sessions?.[0]?.id) {
+      setActiveSessionId((current: string) => current || json.sessions[0].id);
+      setIsNewWorkflow(false);
+    }
   };
 
   useEffect(() => {
@@ -92,7 +98,7 @@ export function ConversationQuoteDesk() {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: activeSession?.id, command: text })
+        body: JSON.stringify({ sessionId: isNewWorkflow ? "" : activeSession?.id, command: text })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Quote agent failed");
@@ -137,10 +143,14 @@ export function ConversationQuoteDesk() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Discard failed");
-      setSessions((prev) => prev.map((session) => session.id === json.session.id ? json.session : session));
+      setSessions((prev) => {
+        const nextSessions = prev.map((session) => session.id === json.session.id ? json.session : session);
+        const nextActive = nextSessions.find((session) => session.id !== activeSession.id && session.status !== "discarded");
+        setActiveSessionId(nextActive?.id || "");
+        setIsNewWorkflow(!nextActive);
+        return nextSessions;
+      });
       setApprovalModal(null);
-      const nextActive = sessions.find((session) => session.id !== activeSession.id && session.status !== "discarded");
-      setActiveSessionId(nextActive?.id || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Discard failed");
     } finally {
@@ -170,36 +180,36 @@ export function ConversationQuoteDesk() {
   const renderCard = (card: QuoteUiCard) => {
     if (card.type === "email_preview") {
       return (
-        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-          <div className="flex items-start justify-between gap-3">
+        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]" open>
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
             <div>
-              <div className="section-title">Buyer email</div>
+              <div className="section-title">Step 1 · Buyer Email</div>
               <div className="mt-1 text-base font-semibold text-steel-950">{card.email.subject || "(No subject)"}</div>
               <div className="mt-1 text-xs text-steel-600">{card.email.fromEmail} · {formatTime(card.email.receivedAt)}</div>
             </div>
             <span className="rounded-full border border-steel-200 bg-steel-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-600">
-              Source
+              Expand
             </span>
-          </div>
+          </summary>
           <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-steel-200 bg-steel-50/80 p-3 text-sm leading-6 text-steel-700 whitespace-pre-wrap">
             {card.email.bodyText}
           </div>
-        </div>
+        </details>
       );
     }
 
     if (card.type === "rfq_extraction") {
       return (
-        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-          <div className="flex items-start justify-between gap-3">
+        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]" open>
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
             <div>
-              <div className="section-title">Parsed RFQ</div>
+              <div className="section-title">Step 2 · Parsed RFQ</div>
               <div className="mt-1 text-sm text-steel-600">{card.summary}</div>
             </div>
             <div className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-teal-700">
               {card.lineItems.length} lines
             </div>
-          </div>
+          </summary>
           <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
             <table className="data-grid border-0">
               <thead>
@@ -220,19 +230,22 @@ export function ConversationQuoteDesk() {
               </tbody>
             </table>
           </div>
-        </div>
+        </details>
       );
     }
 
     if (card.type === "inventory_match") {
       return (
-        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-          <div className="flex items-center justify-between gap-3">
+        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
             <div>
-              <div className="section-title">Inventory check</div>
+              <div className="section-title">Step 3 · Inventory Check</div>
               <div className="mt-1 text-sm text-steel-600">Each requested line is matched against current inventory before pricing is proposed.</div>
             </div>
-          </div>
+            <span className="rounded-full border border-steel-200 bg-steel-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-600">
+              Review
+            </span>
+          </summary>
           <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
             <table className="data-grid border-0">
               <thead>
@@ -260,23 +273,23 @@ export function ConversationQuoteDesk() {
               </tbody>
             </table>
           </div>
-        </div>
+        </details>
       );
     }
 
     if (card.type === "quote_preview") {
       return (
-        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]" open>
+          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="section-title">Quote draft</div>
+              <div className="section-title">Step 4 · Quote Draft</div>
               <div className="mt-1 text-base font-semibold text-steel-950">{card.customerName}</div>
               <div className="text-sm text-steel-600">{card.buyerEmail}</div>
             </div>
             <div className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700">
               Total {money(card.total)}
             </div>
-          </div>
+          </summary>
           <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
             <table className="data-grid border-0">
               <thead>
@@ -301,12 +314,14 @@ export function ConversationQuoteDesk() {
               </tbody>
             </table>
           </div>
-          <div className="mt-3 rounded-2xl border border-steel-200 bg-steel-50/80 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Outbound draft</div>
+          <details className="mt-3 rounded-2xl border border-steel-200 bg-steel-50/80 p-3">
+            <summary className="cursor-pointer list-none text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">
+              Outbound Draft Email
+            </summary>
             <div className="mt-1 text-sm font-medium text-steel-900">{card.draftSubject}</div>
             <div className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-xs leading-5 text-steel-700">{card.draftBody}</div>
-          </div>
-        </div>
+          </details>
+        </details>
       );
     }
 
@@ -355,6 +370,7 @@ export function ConversationQuoteDesk() {
               <button
                 className="btn-secondary"
                 onClick={() => {
+                  setIsNewWorkflow(true);
                   setActiveSessionId("");
                   setInput("");
                   setError("");
@@ -377,7 +393,7 @@ export function ConversationQuoteDesk() {
                   <div className="mt-1 text-sm text-steel-600">
                     {activeSession
                       ? `${activeSession.buyerEmail || "Buyer not linked"} · last updated ${formatTime(activeSession.updatedAt)}`
-                      : "Start a workflow from chat or use one of the suggested prompts."}
+                      : "Start a new workflow from chat or use one of the suggested prompts."}
                   </div>
                 </div>
                 {activeSession && (
@@ -515,7 +531,10 @@ export function ConversationQuoteDesk() {
                   className={activeSession?.id === session.id
                     ? "w-full rounded-2xl border border-orange-300 bg-orange-50/70 px-3 py-3 text-left"
                     : "w-full rounded-2xl border border-steel-200 bg-white/75 px-3 py-3 text-left"}
-                  onClick={() => setActiveSessionId(session.id)}
+                  onClick={() => {
+                    setIsNewWorkflow(false);
+                    setActiveSessionId(session.id);
+                  }}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
