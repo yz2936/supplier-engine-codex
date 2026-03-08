@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AIChatPanel } from "@/components/AIChatPanel";
 import { BuyerInbox } from "@/components/BuyerInbox";
+import { ConversationQuoteDesk } from "@/components/ConversationQuoteDesk";
 import { DashboardOverview } from "@/components/DashboardOverview";
 import { EmailIntegrationSettings } from "@/components/EmailIntegrationSettings";
 import { InventoryCatalogManager } from "@/components/InventoryCatalogManager";
@@ -941,7 +942,10 @@ export default function HomePage() {
           </header>
 
           {activeView === "dashboard" && (
-            <DashboardOverview onNavigateView={setActiveView} />
+            <div className="space-y-4">
+              <ConversationQuoteDesk onOpenWorkspace={() => setActiveView("workspace")} />
+              <DashboardOverview onNavigateView={setActiveView} />
+            </div>
           )}
 
           {activeView === "workspace" && (

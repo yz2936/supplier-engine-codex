@@ -176,6 +176,7 @@ const defaultData: AppData = {
     }
   ],
   sessions: [],
+  quoteAgentSessions: [],
   buyers: [],
   buyerMessages: []
 };
@@ -217,6 +218,7 @@ const normalizeData = (raw: AppData): AppData => {
     })),
     users,
     sessions: (raw.sessions ?? []).filter((s) => s?.token && s?.userId && s?.expiresAt),
+    quoteAgentSessions: raw.quoteAgentSessions ?? [],
     buyers: raw.buyers ?? [],
     buyerMessages: raw.buyerMessages ?? []
   };

@@ -103,6 +103,125 @@ export type Quote = {
   contractPdfFileName?: string;
 };
 
+export type QuoteWorkflowStage =
+  | "idle"
+  | "email_selected"
+  | "rfq_parsed"
+  | "inventory_checked"
+  | "draft_ready"
+  | "awaiting_approval"
+  | "sent"
+  | "rejected"
+  | "error";
+
+export type QuoteWorkflowStatus = "active" | "awaiting_approval" | "completed" | "rejected" | "error";
+
+export type QuoteAgentActivity = {
+  id: string;
+  at: string;
+  actor: "agent" | "user" | "system";
+  kind: "step" | "approval_requested" | "approval_granted" | "approval_rejected" | "send" | "error";
+  detail: string;
+};
+
+export type QuoteConversationMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  at: string;
+  content: string;
+};
+
+export type QuoteApprovalRequest = {
+  id: string;
+  type: "send_quote_email" | "finalize_quote" | "commit_pricing_update" | "override_inventory_rule" | "contact_external_party";
+  title: string;
+  detail: string;
+  createdAt: string;
+  status: "pending" | "approved" | "rejected";
+};
+
+export type QuoteUiCard =
+  | {
+    id: string;
+    type: "email_preview";
+    title: string;
+    email: {
+      subject: string;
+      fromEmail: string;
+      receivedAt: string;
+      bodyText: string;
+      buyerName: string;
+      buyerEmail: string;
+      attachments?: BuyerMessage["attachments"];
+    };
+  }
+  | {
+    id: string;
+    type: "rfq_extraction";
+    title: string;
+    summary: string;
+    lineItems: ExtractedLineItem[];
+  }
+  | {
+    id: string;
+    type: "inventory_match";
+    title: string;
+    matches: MatchResult[];
+  }
+  | {
+    id: string;
+    type: "quote_preview";
+    title: string;
+    customerName: string;
+    buyerEmail: string;
+    lines: QuoteLine[];
+    total: number;
+    draftSubject: string;
+    draftBody: string;
+    eta?: string;
+  }
+  | {
+    id: string;
+    type: "risk_alert";
+    title: string;
+    severity: "info" | "warning" | "critical";
+    items: string[];
+  }
+  | {
+    id: string;
+    type: "approval";
+    title: string;
+    approval: QuoteApprovalRequest;
+  };
+
+export type QuoteAgentSession = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  createdByUserId: string;
+  status: QuoteWorkflowStatus;
+  stage: QuoteWorkflowStage;
+  title: string;
+  customerName?: string;
+  buyerEmail?: string;
+  buyerName?: string;
+  sourceBuyerId?: string;
+  sourceMessageId?: string;
+  sourceMessageSubject?: string;
+  rfqText?: string;
+  messages: QuoteConversationMessage[];
+  cards: QuoteUiCard[];
+  activities: QuoteAgentActivity[];
+  approval?: QuoteApprovalRequest;
+  quoteDraft?: {
+    lines: QuoteLine[];
+    total: number;
+    subject: string;
+    body: string;
+    eta?: string;
+  };
+};
+
 export type Manufacturer = {
   id: string;
   name: string;
@@ -184,6 +303,7 @@ export type AppData = {
   sourcingRequests: SourcingRequest[];
   users: AppUser[];
   sessions: Session[];
+  quoteAgentSessions: QuoteAgentSession[];
   buyers: BuyerProfile[];
   buyerMessages: BuyerMessage[];
 };

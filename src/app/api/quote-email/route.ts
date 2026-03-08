@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
-import { mutateData, readData } from "@/lib/data-store";
-import { draftQuoteHtml, draftQuoteText, QuoteDraftMeta } from "@/lib/format";
-import { upsertBuyerProfile } from "@/lib/buyer-routing";
+import { QuoteDraftMeta } from "@/lib/format";
 import { requireRole } from "@/lib/server-auth";
 import { QuoteLine } from "@/lib/types";
-import { getSmtpConfigForUser } from "@/lib/user-email-config";
-import { buildQuotePdf } from "@/lib/quote-pdf";
+import { sendQuoteEmail } from "@/lib/quote-email-service";
 
 export async function POST(req: Request) {
   try {
@@ -27,80 +23,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No quote lines to send" }, { status: 400 });
     }
 
-    const data = await readData();
-    const cfg = getSmtpConfigForUser(data, auth.user.id);
-    if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
-      return NextResponse.json({
-        error: "Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account."
-      }, { status: 400 });
-    }
-
-    const transporter = nodemailer.createTransport(cfg);
-    const managerTag = `[#SLMGR:${auth.user.id}]`;
-    const baseSubject = meta.subject || `Quotation for ${customerName}`;
-    const subject = baseSubject.includes(managerTag) ? baseSubject : `${baseSubject} ${managerTag}`;
-    const text = draftQuoteText(customerName, lines, total, meta);
-    const html = draftQuoteHtml(customerName, lines, total, meta);
-    const fromAddress = cfg.from || auth.user.email;
-    const quoteId = crypto.randomUUID();
-    const quotePdf = buildQuotePdf({ quoteId, customerName, lines, total, meta });
-    const safeCustomer = customerName.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "quote";
-    const pdfFileName = `Contract_Quote_${safeCustomer}_${new Date().toISOString().slice(0, 10)}.pdf`;
-
-    await transporter.sendMail({
-      from: fromAddress,
-      to: buyerEmail,
-      subject,
-      text,
-      html,
-      replyTo: auth.user.email,
-      attachments: [
-        {
-          filename: pdfFileName,
-          content: quotePdf,
-          contentType: "application/pdf"
-        }
-      ]
+    const sent = await sendQuoteEmail({
+      userId: auth.user.id,
+      userEmail: auth.user.email,
+      buyerEmail,
+      customerName,
+      lines,
+      total,
+      meta
     });
 
-    await mutateData((data) => {
-      const buyer = upsertBuyerProfile(data, auth.user.id, buyerEmail, customerName);
-      data.buyerMessages.push({
-        id: crypto.randomUUID(),
-        buyerId: buyer.id,
-        managerUserId: auth.user.id,
-        direction: "outbound",
-        subject,
-        bodyText: text,
-        fromEmail: fromAddress || auth.user.email,
-        toEmail: buyerEmail,
-        receivedAt: new Date().toISOString(),
-        relatedQuoteId: quoteId,
-        attachments: [
-          {
-            filename: pdfFileName,
-            contentType: "application/pdf",
-            kind: "quote_contract_pdf"
-          }
-        ]
-      });
-      data.quotes.push({
-        id: quoteId,
-        customerName,
-        createdByUserId: auth.user.id,
-        itemsQuoted: lines,
-        totalPrice: total,
-        status: "Sent",
-        createdAt: new Date().toISOString(),
-        sentToEmail: buyerEmail,
-        lastSentAt: new Date().toISOString(),
-        lastSentSubject: subject,
-        contractPdfFileName: pdfFileName
-      });
-      return null;
-    });
-
-    return NextResponse.json({ ok: true, message: `Quote email sent to ${buyerEmail} with contract PDF attachment` });
+    return NextResponse.json({ ok: true, message: sent.message });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to send quote email";
     const isAuthError = /535|badcredentials|auth/i.test(message);
