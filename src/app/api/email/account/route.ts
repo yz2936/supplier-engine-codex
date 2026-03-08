@@ -73,7 +73,8 @@ export async function POST(req: Request) {
       imapPort = Number(body.imap?.port ?? 993);
       imapSecure = Boolean(body.imap?.secure ?? true);
       imapUser = String(body.imap?.user ?? smtpUser).trim().toLowerCase();
-      imapPass = String(body.imap?.pass ?? smtpPass).trim();
+      const inboundImapPass = String(body.imap?.pass ?? "").trim();
+      imapPass = inboundImapPass || (imapUser === smtpUser ? smtpPass : "");
       imapRejectUnauthorized = body.imap?.rejectUnauthorized ?? true;
     }
   } else {
@@ -81,7 +82,8 @@ export async function POST(req: Request) {
     popPort = Number(body.pop?.port ?? 995);
     popSecure = Boolean(body.pop?.secure ?? true);
     popUser = String(body.pop?.user ?? smtpUser).trim().toLowerCase();
-    popPass = String(body.pop?.pass ?? smtpPass).trim();
+    const inboundPopPass = String(body.pop?.pass ?? "").trim();
+    popPass = inboundPopPass || (popUser === smtpUser ? smtpPass : "");
     popRejectUnauthorized = body.pop?.rejectUnauthorized ?? true;
   }
 
