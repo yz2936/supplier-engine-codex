@@ -20,6 +20,13 @@ import {
 } from "@/lib/types";
 
 const nowIso = () => new Date().toISOString();
+const normalizeLookup = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const normalizeCompact = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const technicalStopWords = new Set([
+  "quote", "quoted", "quoting", "email", "emails", "buyer", "buyers", "company", "latest", "find", "look", "parse",
+  "from", "for", "show", "need", "with", "about", "request", "rfq", "please", "this", "that", "their", "them",
+  "the", "and", "or", "a", "an", "to", "of", "on", "in"
+]);
 
 const newMessage = (role: QuoteConversationMessage["role"], content: string): QuoteConversationMessage => ({
   id: crypto.randomUUID(),
@@ -98,6 +105,171 @@ const latestInboundCandidate = async (data: AppData, user: AppUser) => {
   }
 
   return inbound[0] || null;
+};
+
+const extractRequestedCompany = (command: string) => {
+  const raw = command.trim();
+  const domain = raw.match(/@([a-z0-9.-]+\.[a-z]{2,})/i);
+  if (domain?.[1]) return `@${domain[1].toLowerCase()}`;
+  const quoted = raw.match(/["']([^"']{2,120})["']/);
+  if (quoted?.[1]) return quoted[1].trim();
+
+  const patterns = [
+    /\b(?:from|for)\s+([A-Za-z0-9&.,'()\- ]{2,80}?)(?:\s+(?:email|buyer|company|request|rfq)\b|[.?!,]|$)/i,
+    /\b(?:look for|find|parse|quote)\s+(?:the\s+)?(?:latest\s+)?(?:email|rfq|request)?\s*(?:from\s+)?([A-Za-z0-9&.,'()\- ]{2,80}?)(?:\s+(?:email|buyer|company|request|rfq)\b|[.?!,]|$)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+
+  return "";
+};
+
+const extractTechnicalHints = (command: string) => {
+  const lowered = command.toLowerCase();
+  const matches = lowered.match(/[a-z0-9#./"-]+/g) || [];
+  const tokens = matches
+    .map((token) => token.replace(/^["']|["']$/g, ""))
+    .filter((token) => token.length >= 2)
+    .filter((token) => !technicalStopWords.has(token))
+    .filter((token) => /[\d"]/i.test(token) || /(pipe|tube|tubing|valve|ball|gate|globe|check|butterfly|plug|needle|relief|control|flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|gasket|strainer|steel|stainless|carbon|a105|a106|a234|a312|wpb|tp316|tp304|316l|304l|sch|class|wog|bw|sw|npt|rf|rtj|smls|seamless|welded|dn|nps|inch|in|ft|m|pcs|ea)/.test(token))
+    .slice(0, 10);
+  return Array.from(new Set(tokens));
+};
+
+const resolveTargetMessage = async (data: AppData, user: AppUser, command: string) => {
+  const target = extractRequestedCompany(command);
+  const technicalHints = extractTechnicalHints(command);
+  if (!target) {
+    return { target: "", message: await latestInboundCandidate(data, user) };
+  }
+
+  const targetNorm = normalizeLookup(target);
+  const targetCompact = normalizeCompact(target);
+  const targetDomain = target.startsWith("@") ? target.slice(1).toLowerCase() : "";
+  const inbound = [...data.buyerMessages]
+    .filter((message) => message.managerUserId === user.id && message.direction === "inbound")
+    .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+
+  const scored = await Promise.all(inbound.map(async (message) => {
+    const buyer = data.buyers.find((candidate) => candidate.id === message.buyerId);
+    const buyerCompany = buyer?.companyName || "";
+    const haystacks = [
+      buyerCompany,
+      message.fromEmail,
+      message.subject,
+      message.bodyText.slice(0, 800)
+    ];
+
+    let score = 0;
+    for (const haystack of haystacks) {
+      const lookup = normalizeLookup(haystack);
+      const compact = normalizeCompact(haystack);
+      if (!lookup && !compact) continue;
+      if (lookup.includes(targetNorm)) score += 5;
+      if (compact.includes(targetCompact)) score += 4;
+    }
+    if (targetDomain) {
+      const fromDomain = message.fromEmail.split("@")[1]?.toLowerCase() || "";
+      if (fromDomain === targetDomain) score += 10;
+      else if (fromDomain.endsWith(`.${targetDomain}`) || targetDomain.endsWith(`.${fromDomain}`)) score += 7;
+    }
+
+    const searchableText = normalizeLookup(`${message.subject} ${message.bodyText.slice(0, 2000)}`);
+    for (const hint of technicalHints) {
+      const normalizedHint = normalizeLookup(hint);
+      if (normalizedHint && searchableText.includes(normalizedHint)) score += 2;
+    }
+
+    const decision = await filterInboundEmail(message.subject, message.bodyText);
+    if (decision.accept) score += 1;
+    return { message, score };
+  }));
+
+  const best = scored
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || b.message.receivedAt.localeCompare(a.message.receivedAt))[0];
+
+  return { target, message: best?.message || null };
+};
+
+const hydrateQuoteSessionFromMessage = async (
+  data: AppData,
+  user: AppUser,
+  session: QuoteAgentSession,
+  sourceMessage: BuyerMessage,
+  seed?: { buyerName?: string; buyerEmail?: string; rfqText?: string }
+) => {
+  const buyerEmail = seed?.buyerEmail?.trim() || sourceMessage.fromEmail;
+  const buyerName = seed?.buyerName?.trim() || data.buyers.find((buyer) => buyer.id === sourceMessage.buyerId)?.companyName || "Buyer";
+  const rfqText = seed?.rfqText?.trim() || sourceMessage.bodyText;
+  const marginPercent = session.marginPercent ?? 12;
+  const extracted = await parseRFQ(rfqText, "openai");
+  const matches = findBestMatches(extracted, data.inventory);
+  const quoteLines = buildQuoteLines(matches, data.surcharges, marginPercent);
+  const total = quoteTotal(quoteLines);
+  const draftSubject = `Quotation for ${buyerName}`;
+  const draftBody = draftQuoteText(buyerName, quoteLines, total, {
+    buyerName,
+    subject: draftSubject,
+    intro: `Thank you for the opportunity. Please find our quotation below for ${buyerName}.`,
+    eta: "Earliest available",
+    validDays: 7,
+    incoterm: "FOB Origin",
+    paymentTerms: "Net 30",
+    freightTerms: "Packed for sea freight",
+    notes: "",
+    senderName: user.name,
+    senderTitle: user.role,
+    companyName: user.companyName
+  });
+
+  const approval: QuoteApprovalRequest = {
+    id: crypto.randomUUID(),
+    type: "send_quote_email",
+    title: "Approve sending this quote",
+    detail: `Approve sending the draft quote to ${buyerEmail}?`,
+    createdAt: nowIso(),
+    status: "pending"
+  };
+
+  return {
+    ...session,
+    updatedAt: nowIso(),
+    title: `Quote ${buyerName}`,
+    customerName: buyerName,
+    buyerEmail,
+    buyerName,
+    sourceBuyerId: sourceMessage.buyerId,
+    sourceMessageId: sourceMessage.id,
+    sourceMessageSubject: sourceMessage.subject,
+    rfqText,
+    quoteDraft: {
+      lines: quoteLines,
+      total,
+      subject: draftSubject,
+      body: draftBody,
+      eta: "Earliest available"
+    },
+    approval,
+    stage: "awaiting_approval" as const,
+    status: "awaiting_approval" as const,
+    cards: buildCards({
+      sourceMessage,
+      buyerName,
+      buyerEmail,
+      extractedText: rfqText,
+      lines: extracted,
+      matches,
+      quoteLines,
+      total,
+      draftSubject,
+      draftBody,
+      approval
+    })
+  };
 };
 
 const buildRiskCard = (matches: MatchResult[], sourceMessage: BuyerMessage | null): QuoteUiCard | null => {
@@ -221,9 +393,13 @@ export const createQuoteAgentSession = async (
   command: string,
   seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string }
 ) => {
-  const sourceMessage = seed?.sourceMessageId
-    ? data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
-    : await latestInboundCandidate(data, user);
+  const resolved = seed?.sourceMessageId
+    ? {
+      target: seed.buyerName || seed.buyerEmail || "",
+      message: data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
+    }
+    : await resolveTargetMessage(data, user, command);
+  const sourceMessage = resolved.message;
   const session: QuoteAgentSession = {
     id: crypto.randomUUID(),
     createdAt: nowIso(),
@@ -241,89 +417,56 @@ export const createQuoteAgentSession = async (
   if (!sourceMessage) {
     session.status = "error";
     session.stage = "error";
-    session.messages.push(newMessage("assistant", "I could not find any buyer email in your inbox to start quoting from."));
-    session.activities.push(newActivity("agent", "error", "No buyer email was available for quoting."));
+    session.messages.push(newMessage("assistant", resolved.target
+      ? `I could not find a buyer email from ${resolved.target} in your inbox to quote from.`
+      : "I could not find any buyer email in your inbox to start quoting from."
+    ));
+    session.activities.push(newActivity("agent", "error", resolved.target
+      ? `No buyer email from ${resolved.target} was available for quoting.`
+      : "No buyer email was available for quoting."
+    ));
     return session;
   }
-
-  const buyerEmail = seed?.buyerEmail?.trim() || sourceMessage.fromEmail;
-  const buyerName = seed?.buyerName?.trim() || data.buyers.find((buyer) => buyer.id === sourceMessage.buyerId)?.companyName || "Buyer";
-  const rfqText = seed?.rfqText?.trim() || sourceMessage.bodyText;
-  const extracted = await parseRFQ(rfqText, "openai");
-  const matches = findBestMatches(extracted, data.inventory);
-  const quoteLines = buildQuoteLines(matches, data.surcharges, 12);
-  const total = quoteTotal(quoteLines);
-  const draftSubject = `Quotation for ${buyerName}`;
-  const draftBody = draftQuoteText(buyerName, quoteLines, total, {
-    buyerName,
-    subject: draftSubject,
-    intro: `Thank you for the opportunity. Please find our quotation below for ${buyerName}.`,
-    eta: "Earliest available",
-    validDays: 7,
-    incoterm: "FOB Origin",
-    paymentTerms: "Net 30",
-    freightTerms: "Packed for sea freight",
-    notes: "",
-    senderName: user.name,
-    senderTitle: user.role,
-    companyName: user.companyName
-  });
-
-  const approval: QuoteApprovalRequest = {
-    id: crypto.randomUUID(),
-    type: "send_quote_email",
-    title: "Approve sending this quote",
-    detail: `Approve sending the draft quote to ${buyerEmail}?`,
-    createdAt: nowIso(),
-    status: "pending"
-  };
-
-  session.title = `Quote ${buyerName}`;
-  session.customerName = buyerName;
-  session.buyerEmail = buyerEmail;
-  session.buyerName = buyerName;
-  session.sourceBuyerId = sourceMessage.buyerId;
-  session.sourceMessageId = sourceMessage.id;
-  session.sourceMessageSubject = sourceMessage.subject;
-  session.rfqText = rfqText;
-  session.quoteDraft = {
-    lines: quoteLines,
-    total,
-    subject: draftSubject,
-    body: draftBody,
-    eta: "Earliest available"
-  };
-  session.approval = approval;
-  session.stage = "awaiting_approval";
-  session.status = "awaiting_approval";
-  session.cards = buildCards({
-    sourceMessage,
-    buyerName,
-    buyerEmail,
-    extractedText: rfqText,
-    lines: extracted,
-    matches,
-    quoteLines,
-    total,
-    draftSubject,
-    draftBody,
-    approval
-  });
+  const hydrated = await hydrateQuoteSessionFromMessage(data, user, session, sourceMessage, seed);
   session.messages.push(
-    newMessage("assistant", `I found the latest buyer RFQ from ${buyerEmail}, parsed ${extracted.length} line item${extracted.length === 1 ? "" : "s"}, checked inventory, and prepared a draft quote. Review the cards and approve before I send anything.`)
+    newMessage("assistant", resolved.target
+      ? `I found the latest buyer RFQ from ${hydrated.buyerEmail} for ${hydrated.buyerName}, parsed ${hydrated.quoteDraft?.lines.length || 0} priced line item${(hydrated.quoteDraft?.lines.length || 0) === 1 ? "" : "s"}, checked inventory, and prepared a draft quote. Review the cards and approve before I send anything.`
+      : `I found the latest buyer RFQ from ${hydrated.buyerEmail}, parsed ${hydrated.quoteDraft?.lines.length || 0} priced line item${(hydrated.quoteDraft?.lines.length || 0) === 1 ? "" : "s"}, checked inventory, and prepared a draft quote. Review the cards and approve before I send anything.`
+    )
   );
   session.activities.push(
-    newActivity("agent", "step", `Selected latest buyer email: ${sourceMessage.subject || "(no subject)"}`),
-    newActivity("agent", "step", `Parsed ${extracted.length} requested line item${extracted.length === 1 ? "" : "s"}`),
+    newActivity("agent", "step", `${resolved.target ? `Selected latest buyer email from ${resolved.target}` : "Selected latest buyer email"}: ${sourceMessage.subject || "(no subject)"}`),
+    newActivity("agent", "step", `Parsed ${hydrated.quoteDraft?.lines.length || 0} priced line item${(hydrated.quoteDraft?.lines.length || 0) === 1 ? "" : "s"}`),
     newActivity("agent", "step", "Compared parsed items against inventory and pricing rules"),
-    newActivity("agent", "approval_requested", `Approval requested to send quote to ${buyerEmail}`)
+    newActivity("agent", "approval_requested", `Approval requested to send quote to ${hydrated.buyerEmail}`)
   );
-  return session;
+  return { ...hydrated, messages: session.messages, activities: session.activities };
 };
 
 export const applyConversationCommand = async (data: AppData, user: AppUser, session: QuoteAgentSession, command: string) => {
   const next = { ...session, updatedAt: nowIso(), messages: [...session.messages, newMessage("user", command)], activities: [...session.activities, newActivity("user", "step", command)] };
   const lower = command.toLowerCase();
+
+  if (/\b(?:quote|parse|find|look for|show)\b/.test(lower) && /\b(?:from|for)\b/.test(lower)) {
+    const resolved = await resolveTargetMessage(data, user, command);
+    if (resolved.target) {
+      if (!resolved.message) {
+        next.messages.push(newMessage("assistant", `I could not find a buyer email from ${resolved.target} in your inbox.`));
+        next.activities.push(newActivity("agent", "error", `No buyer email from ${resolved.target} was available for quoting.`));
+        return next;
+      }
+      const retargeted = await hydrateQuoteSessionFromMessage(data, user, next, resolved.message);
+      retargeted.messages = [
+        ...next.messages,
+        newMessage("assistant", `I switched the quote session to the latest qualifying buyer email from ${resolved.target}, parsed the RFQ, checked inventory, and refreshed the draft quote.`)
+      ];
+      retargeted.activities = [
+        ...next.activities,
+        newActivity("agent", "step", `Retargeted quote session to ${resolved.target}: ${resolved.message.subject || "(no subject)"}`)
+      ];
+      return retargeted;
+    }
+  }
 
   if (/show .*buyer email|show .*email again/.test(lower)) {
     next.messages.push(newMessage("assistant", "Showing the buyer email again in the quote thread cards."));
