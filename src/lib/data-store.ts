@@ -236,8 +236,17 @@ const isRetryableDbError = (err: unknown) => {
     || msg.includes("timeout")
     || msg.includes("timed out")
     || msg.includes("econnreset")
+    || msg.includes("econnrefused")
+    || msg.includes("enotfound")
     || msg.includes("connection terminated")
     || msg.includes("server closed");
+};
+
+const canFallbackToFile = () => !process.env.VERCEL || isTrue(process.env.ALLOW_FILE_DATA_FALLBACK, false);
+
+const shouldFallbackToFileOnDbError = (error: unknown) => {
+  if (!canFallbackToFile()) return false;
+  return isRetryableDbError(error) || isCertChainError(error);
 };
 
 const withDbReadRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -350,6 +359,9 @@ export const readData = async (): Promise<AppData> => {
     try {
       return await withDbReadRetry(readFromDb);
     } catch (error) {
+      if (shouldFallbackToFileOnDbError(error)) {
+        return readFromFile();
+      }
       throw mapDbError(error);
     }
   }
@@ -361,6 +373,10 @@ export const writeData = async (data: AppData) => {
     try {
       await writeToDb(data);
     } catch (error) {
+      if (shouldFallbackToFileOnDbError(error)) {
+        await writeToFile(data);
+        return;
+      }
       throw mapDbError(error);
     }
     return;
@@ -397,6 +413,14 @@ export const mutateData = async <T>(mutator: (data: AppData) => Promise<T> | T):
         client.release();
       }
     } catch (error) {
+      if (shouldFallbackToFileOnDbError(error)) {
+        return withFileLock(async () => {
+          const data = await readFromFile();
+          const result = await mutator(data);
+          await writeToFile(data);
+          return result;
+        });
+      }
       throw mapDbError(error);
     }
   }

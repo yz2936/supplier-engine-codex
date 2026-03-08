@@ -1842,6 +1842,17 @@
       "companyName": "brava stainless",
       "onboarded": true,
       "createdAt": "2026-02-20T03:51:51.285Z"
+    },
+    {
+      "id": "0d8371bb-e580-4c76-86a3-e27441ac4d4d",
+      "name": "Brava Sales",
+      "email": "sales@brava-steel.com",
+      "passwordHash": "a109e36947ad56de1dca1cc49f0ef8ac9ad9a7b1aa0df41fb3c4cb73c1ff01ea",
+      "role": "sales_manager",
+      "companyId": "c_ba18ab86",
+      "companyName": "brava stainless",
+      "onboarded": true,
+      "createdAt": "2026-03-08T14:30:00.000Z"
     }
   ],
   "sessions": [
