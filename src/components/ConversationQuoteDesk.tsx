@@ -8,15 +8,11 @@ import {
   QuoteUiCard
 } from "@/lib/types";
 
-type Props = {
-  onOpenWorkspace?: () => void;
-};
-
 const starterPrompts = [
   "Quote the latest email from the buyer.",
-  "Show me the buyer email again.",
   "Don't include the out-of-stock items.",
-  "Change the lead time to 8 weeks."
+  "Change the lead time to 8 weeks.",
+  "Draft a more concise email."
 ];
 
 const stageLabels = [
@@ -28,19 +24,36 @@ const stageLabels = [
   { key: "sent", label: "Sent" }
 ] as const;
 
-export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
+const statusTone: Record<string, string> = {
+  active: "status-chip-steel",
+  saved: "status-chip-teal",
+  awaiting_approval: "status-chip-amber",
+  completed: "status-chip-teal",
+  rejected: "status-chip-steel",
+  discarded: "status-chip-steel",
+  error: "status-chip-amber"
+};
+
+const formatTime = (value?: string) => value ? new Date(value).toLocaleString() : "Not yet";
+
+export function ConversationQuoteDesk() {
   const [sessions, setSessions] = useState<QuoteAgentSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [approvalModal, setApprovalModal] = useState<QuoteApprovalRequest | null>(null);
+  const [pendingMargin, setPendingMargin] = useState(12);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) || sessions[0] || null,
     [activeSessionId, sessions]
   );
+
+  useEffect(() => {
+    setPendingMargin(activeSession?.marginPercent ?? 12);
+  }, [activeSession?.id, activeSession?.marginPercent]);
 
   const upsertSession = (next: QuoteAgentSession) => {
     setSessions((prev) => {
@@ -67,7 +80,7 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSession?.messages]);
+  }, [activeSession?.messages, activeSession?.cards]);
 
   const sendCommand = async (command: string) => {
     const text = command.trim();
@@ -92,6 +105,49 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
     }
   };
 
+  const runSessionAction = async (action: "save" | "update_margin", body?: Record<string, unknown>) => {
+    if (!activeSession) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/agent/quote/${activeSession.id}`, {
+        credentials: "include",
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, ...body })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Quote session update failed");
+      upsertSession(json.session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Quote session update failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const discardWorkflow = async () => {
+    if (!activeSession) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/agent/quote/${activeSession.id}`, {
+        credentials: "include",
+        method: "DELETE"
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Discard failed");
+      setSessions((prev) => prev.map((session) => session.id === json.session.id ? json.session : session));
+      setApprovalModal(null);
+      const nextActive = sessions.find((session) => session.id !== activeSession.id && session.status !== "discarded");
+      setActiveSessionId(nextActive?.id || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Discard failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const approveSend = async () => {
     if (!activeSession) return;
     setBusy(true);
@@ -104,7 +160,6 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Approval failed");
       upsertSession(json.session);
-      onOpenWorkspace?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Approval failed");
     } finally {
@@ -115,11 +170,18 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
   const renderCard = (card: QuoteUiCard) => {
     if (card.type === "email_preview") {
       return (
-        <div key={card.id} className="landing-card space-y-2">
-          <div className="section-title">Email preview</div>
-          <div className="text-lg font-semibold text-steel-900">{card.email.subject || "(No subject)"}</div>
-          <div className="text-xs text-steel-600">{card.email.fromEmail} · {new Date(card.email.receivedAt).toLocaleString()}</div>
-          <div className="max-h-44 overflow-auto rounded-2xl border border-steel-200 bg-white/70 p-3 text-sm text-steel-700 whitespace-pre-wrap">
+        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="section-title">Buyer email</div>
+              <div className="mt-1 text-base font-semibold text-steel-950">{card.email.subject || "(No subject)"}</div>
+              <div className="mt-1 text-xs text-steel-600">{card.email.fromEmail} · {formatTime(card.email.receivedAt)}</div>
+            </div>
+            <span className="rounded-full border border-steel-200 bg-steel-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-600">
+              Source
+            </span>
+          </div>
+          <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-steel-200 bg-steel-50/80 p-3 text-sm leading-6 text-steel-700 whitespace-pre-wrap">
             {card.email.bodyText}
           </div>
         </div>
@@ -128,19 +190,35 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
     if (card.type === "rfq_extraction") {
       return (
-        <div key={card.id} className="landing-card space-y-3">
-          <div>
-            <div className="section-title">RFQ extraction</div>
-            <div className="mt-1 text-sm text-steel-600">{card.summary}</div>
+        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="section-title">Parsed RFQ</div>
+              <div className="mt-1 text-sm text-steel-600">{card.summary}</div>
+            </div>
+            <div className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-teal-700">
+              {card.lineItems.length} lines
+            </div>
           </div>
-          <div className="space-y-2">
-            {card.lineItems.map((item, index) => (
-              <div key={`${item.rawSpec}-${index}`} className="rounded-2xl border border-steel-200/70 bg-white/70 p-3">
-                <div className="font-medium text-steel-900">{item.grade} {item.category}</div>
-                <div className="mt-1 text-xs text-steel-600">{summarizeRequestedSpecs(item).join(" | ") || item.rawSpec}</div>
-                <div className="mt-1 text-xs text-steel-700">{item.quantity} {item.quantityUnit}</div>
-              </div>
-            ))}
+          <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
+            <table className="data-grid border-0">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Specs</th>
+                  <th>Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {card.lineItems.map((item, index) => (
+                  <tr key={`${item.rawSpec}-${index}`}>
+                    <td className="py-3 pr-3 text-sm font-medium text-steel-900">{[item.grade, item.category].filter(Boolean).join(" ")}</td>
+                    <td className="py-3 pr-3 text-xs text-steel-600">{summarizeRequestedSpecs(item).join(" | ") || item.rawSpec}</td>
+                    <td className="py-3 pr-3 text-sm text-steel-800">{item.quantity} {item.quantityUnit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       );
@@ -148,10 +226,15 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
     if (card.type === "inventory_match") {
       return (
-        <div key={card.id} className="landing-card space-y-3">
-          <div className="section-title">Inventory comparison</div>
-          <div className="overflow-auto rounded-2xl border border-steel-200 bg-white/80">
-            <table className="data-grid min-w-[720px] border-0">
+        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="section-title">Inventory check</div>
+              <div className="mt-1 text-sm text-steel-600">Each requested line is matched against current inventory before pricing is proposed.</div>
+            </div>
+          </div>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
+            <table className="data-grid border-0">
               <thead>
                 <tr>
                   <th>Status</th>
@@ -169,8 +252,8 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
                         <span className="text-xs text-steel-700">{stockLabel(match.stockStatus)}</span>
                       </div>
                     </td>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{match.requested.grade} {match.requested.category}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-700">{match.inventoryItem?.sku || "No inventory match"}</td>
+                    <td className="py-3 pr-3 text-sm text-steel-800">{[match.requested.grade, match.requested.category].filter(Boolean).join(" ")}</td>
+                    <td className="py-3 pr-3 text-sm text-steel-700">{match.inventoryItem?.sku || "No match"}</td>
                     <td className="py-3 pr-3 text-sm text-steel-700">{match.score.toFixed(2)}</td>
                   </tr>
                 ))}
@@ -183,17 +266,19 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
     if (card.type === "quote_preview") {
       return (
-        <div key={card.id} className="landing-card space-y-3">
-          <div className="flex items-start justify-between gap-3">
+        <div key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="section-title">Quote preview</div>
-              <div className="mt-1 text-lg font-semibold text-steel-900">{card.customerName}</div>
+              <div className="section-title">Quote draft</div>
+              <div className="mt-1 text-base font-semibold text-steel-950">{card.customerName}</div>
               <div className="text-sm text-steel-600">{card.buyerEmail}</div>
             </div>
-            <button className="btn-secondary" onClick={() => onOpenWorkspace?.()}>Open Workspace</button>
+            <div className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700">
+              Total {money(card.total)}
+            </div>
           </div>
-          <div className="overflow-auto rounded-2xl border border-steel-200 bg-white/80">
-            <table className="data-grid min-w-[760px] border-0">
+          <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
+            <table className="data-grid border-0">
               <thead>
                 <tr>
                   <th>Line</th>
@@ -216,10 +301,10 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
               </tbody>
             </table>
           </div>
-          <div className="rounded-2xl border border-steel-200 bg-steel-50/80 p-3 text-sm text-steel-700">
-            <div><span className="font-medium text-steel-900">Draft subject:</span> {card.draftSubject}</div>
-            <div className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap text-xs">{card.draftBody}</div>
-            <div className="mt-3 font-semibold text-steel-900">Total {money(card.total)}</div>
+          <div className="mt-3 rounded-2xl border border-steel-200 bg-steel-50/80 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Outbound draft</div>
+            <div className="mt-1 text-sm font-medium text-steel-900">{card.draftSubject}</div>
+            <div className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-xs leading-5 text-steel-700">{card.draftBody}</div>
           </div>
         </div>
       );
@@ -227,12 +312,12 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
     if (card.type === "risk_alert") {
       return (
-        <div key={card.id} className={`landing-card ${card.severity === "critical" ? "border-rose-200" : "border-amber-200"}`}>
+        <div key={card.id} className={`rounded-[22px] border p-4 ${card.severity === "critical" ? "border-rose-200 bg-rose-50/70" : "border-amber-200 bg-amber-50/70"}`}>
           <div className="section-title">Exceptions</div>
-          <div className="mt-2 text-lg font-semibold text-steel-900">{card.title}</div>
+          <div className="mt-1 text-base font-semibold text-steel-950">{card.title}</div>
           <div className="mt-3 space-y-2">
             {card.items.map((item) => (
-              <div key={item} className="rounded-xl border border-white/80 bg-white/75 px-3 py-2 text-sm text-steel-700">{item}</div>
+              <div key={item} className="rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm text-steel-700">{item}</div>
             ))}
           </div>
         </div>
@@ -241,10 +326,10 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
     if (card.type === "approval") {
       return (
-        <div key={card.id} className="landing-card border-amber-200">
+        <div key={card.id} className="rounded-[22px] border border-orange-200 bg-orange-50/70 p-4">
           <div className="section-title">Approval required</div>
-          <div className="mt-2 text-lg font-semibold text-steel-900">{card.approval.title}</div>
-          <div className="mt-1 text-sm text-steel-600">{card.approval.detail}</div>
+          <div className="mt-1 text-base font-semibold text-steel-950">{card.approval.title}</div>
+          <div className="mt-1 text-sm text-steel-700">{card.approval.detail}</div>
         </div>
       );
     }
@@ -252,19 +337,111 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
     return null;
   };
 
+  const visibleSessions = sessions.filter((session) => session.status !== "discarded");
+
   return (
     <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_320px]">
-        <div className="panel-industrial flex min-h-[760px] flex-col gap-4">
-          <div className="flex items-start justify-between gap-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_300px]">
+        <div className="panel-industrial flex min-h-[760px] flex-col gap-4 overflow-hidden">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="section-title">Conversation-driven quoting</div>
-              <h3 className="font-['Sora'] text-3xl font-semibold tracking-[-0.04em] text-steel-950">Quote command center</h3>
+              <div className="section-title">Quote Desk</div>
+              <h3 className="font-['Sora'] text-3xl font-semibold tracking-[-0.04em] text-steel-950">Conversation-led quoting</h3>
               <p className="mt-2 max-w-2xl text-sm text-steel-600">
-                Use chat as the primary control surface. The agent can pull the latest buyer email, parse the RFQ, check inventory, draft the quote, and stop for approval before any outbound send.
+                Ask for the next quoting action in chat. The agent pulls the buyer email, parses the RFQ, checks stock, prepares pricing, and stops for approval before any send.
               </p>
             </div>
-            <div className="status-chip status-chip-steel">{activeSession?.stage || "idle"}</div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setActiveSessionId("");
+                  setInput("");
+                  setError("");
+                  setApprovalModal(null);
+                }}
+              >
+                New Workflow
+              </button>
+              <button className="btn-secondary" disabled={!activeSession || busy} onClick={() => void runSessionAction("save")}>Save Draft</button>
+              <button className="btn-ghost" disabled={!activeSession || busy} onClick={() => void discardWorkflow()}>Discard</button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="rounded-[24px] border border-steel-200 bg-white/72 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="section-title">Workflow status</div>
+                  <div className="mt-1 text-lg font-semibold text-steel-950">{activeSession?.title || "No active quote yet"}</div>
+                  <div className="mt-1 text-sm text-steel-600">
+                    {activeSession
+                      ? `${activeSession.buyerEmail || "Buyer not linked"} · last updated ${formatTime(activeSession.updatedAt)}`
+                      : "Start a workflow from chat or use one of the suggested prompts."}
+                  </div>
+                </div>
+                {activeSession && (
+                  <span className={`status-chip ${statusTone[activeSession.status] || "status-chip-steel"}`}>
+                    {activeSession.status.replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {stageLabels.map((stage) => {
+                  const isActive = activeSession?.stage === stage.key;
+                  const currentIndex = stageLabels.findIndex((item) => item.key === activeSession?.stage);
+                  const stageIndex = stageLabels.findIndex((item) => item.key === stage.key);
+                  const isCompleted = currentIndex >= stageIndex && currentIndex !== -1;
+                  return (
+                    <div
+                      key={stage.key}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                        isActive
+                          ? "border-orange-300 bg-orange-50 text-orange-800"
+                          : isCompleted
+                            ? "border-teal-200 bg-teal-50 text-teal-800"
+                            : "border-steel-200 bg-white text-steel-500"
+                      }`}
+                    >
+                      {stage.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-steel-200 bg-white/72 p-4">
+              <div className="section-title">Commercial controls</div>
+              <div className="mt-2 flex items-center justify-between text-sm font-medium text-steel-800">
+                <span>Profit margin</span>
+                <span>{pendingMargin}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={40}
+                value={pendingMargin}
+                className="mt-3 w-full"
+                disabled={!activeSession || busy}
+                onChange={(e) => setPendingMargin(Number(e.target.value))}
+              />
+              <button className="btn mt-3 w-full" disabled={!activeSession || busy} onClick={() => void runSessionAction("update_margin", { marginPercent: pendingMargin })}>
+                Apply Margin
+              </button>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/80 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Saved</div>
+                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.savedAt ? "Yes" : "No"}</div>
+                </div>
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/80 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Approval</div>
+                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.approval?.status || "n/a"}</div>
+                </div>
+              </div>
+              <div className="mt-3 text-xs leading-5 text-steel-600">
+                Margin updates recalculate the proposed pricing before approval. Sending remains gated until you approve explicitly.
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -275,72 +452,52 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
             ))}
           </div>
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-auto rounded-[24px] border border-steel-200 bg-white/70 p-4">
+          <div className="min-h-0 flex-1 overflow-auto rounded-[26px] border border-steel-200 bg-[#f7fafc] p-4">
             {!activeSession && (
-              <div className="rounded-2xl border border-dashed border-steel-300 bg-white/80 px-4 py-10 text-center text-sm text-steel-600">
-                Start by asking the agent to quote the latest buyer email.
+              <div className="mx-auto max-w-3xl space-y-3">
+                <div className="rounded-[24px] border border-dashed border-steel-300 bg-white px-5 py-10 text-center">
+                  <div className="text-sm font-medium text-steel-900">Start a quote workflow</div>
+                  <div className="mt-2 text-sm text-steel-600">Type a request like “Quote the latest email from the buyer.” The agent will show each completed step here in the thread.</div>
+                </div>
               </div>
             )}
+
             {activeSession && (
-              <div className="landing-card space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="section-title">Workflow progress</div>
-                    <div className="mt-1 text-lg font-semibold text-steel-900">{activeSession.title}</div>
+              <div className="mx-auto max-w-4xl space-y-3">
+                {activeSession.messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={message.role === "user"
+                      ? "ml-auto max-w-[82%] rounded-[22px] border border-teal-200 bg-teal-50 px-4 py-3"
+                      : message.role === "system"
+                        ? "max-w-[88%] rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3"
+                        : "max-w-[88%] rounded-[22px] border border-steel-200 bg-white px-4 py-3 shadow-[0_12px_32px_rgba(15,23,42,0.04)]"}
+                  >
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-steel-500">{message.role}</div>
+                    <div className="text-sm leading-6 text-steel-800">{message.content}</div>
                   </div>
-                  <div className="status-chip status-chip-steel">{activeSession.status}</div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {stageLabels.map((stage) => {
-                    const isActive = activeSession.stage === stage.key;
-                    const isCompleted = stageLabels.findIndex((item) => item.key === activeSession.stage) >= stageLabels.findIndex((item) => item.key === stage.key);
-                    return (
-                      <div
-                        key={stage.key}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${
-                          isActive
-                            ? "border-orange-300 bg-orange-50 text-orange-800"
-                            : isCompleted
-                              ? "border-teal-200 bg-teal-50 text-teal-800"
-                              : "border-steel-200 bg-white text-steel-500"
-                        }`}
-                      >
-                        {stage.label}
-                      </div>
-                    );
-                  })}
-                </div>
+                ))}
+
+                {activeSession.cards.map(renderCard)}
+                <div ref={endRef} />
               </div>
             )}
-            {activeSession?.messages.map((message) => (
-              <div
-                key={message.id}
-                className={message.role === "user"
-                  ? "ml-auto max-w-[85%] rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm"
-                  : message.role === "system"
-                    ? "max-w-[90%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
-                    : "max-w-[90%] rounded-2xl border border-steel-200 bg-white px-4 py-3 text-sm"}
-              >
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-steel-500">{message.role}</div>
-                <div className="text-steel-800">{message.content}</div>
-              </div>
-            ))}
-            {activeSession?.cards.map(renderCard)}
-            <div ref={endRef} />
           </div>
 
-          <div className="rounded-[24px] border border-steel-200 bg-white/80 p-4">
+          <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
             <div className="flex flex-col gap-3">
               <textarea
                 className="input min-h-24"
-                placeholder="Ask the agent to quote the latest buyer email, revise a line item, update lead time, or approve the send."
+                placeholder="Ask to quote the latest email, change a quantity, apply a lead time, revise tone, or approve the send."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
               />
               <div className="flex flex-wrap gap-2">
                 <button className="btn" disabled={busy} onClick={() => void sendCommand(input)}>{busy ? "Working..." : "Send Command"}</button>
                 {activeSession?.approval?.status === "pending" && (
-                  <button className="btn-secondary" disabled={busy} onClick={() => setApprovalModal(activeSession.approval || null)}>Review Approval</button>
+                  <button className="btn-secondary" disabled={busy} onClick={() => setApprovalModal(activeSession.approval || null)}>
+                    Review Approval
+                  </button>
                 )}
               </div>
             </div>
@@ -350,9 +507,9 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
 
         <div className="space-y-4">
           <div className="landing-card">
-            <div className="section-title">Quote sessions</div>
+            <div className="section-title">Quote workflows</div>
             <div className="mt-3 space-y-2">
-              {sessions.length ? sessions.map((session) => (
+              {visibleSessions.length ? visibleSessions.map((session) => (
                 <button
                   key={session.id}
                   className={activeSession?.id === session.id
@@ -360,10 +517,16 @@ export function ConversationQuoteDesk({ onOpenWorkspace }: Props) {
                     : "w-full rounded-2xl border border-steel-200 bg-white/75 px-3 py-3 text-left"}
                   onClick={() => setActiveSessionId(session.id)}
                 >
-                  <div className="font-medium text-steel-900">{session.title}</div>
-                  <div className="mt-1 text-xs text-steel-600">{session.status} · {new Date(session.updatedAt).toLocaleString()}</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-steel-900">{session.title}</div>
+                      <div className="mt-1 text-xs text-steel-600">{session.customerName || session.buyerEmail || "Unsaved workflow"}</div>
+                    </div>
+                    <span className={`status-chip ${statusTone[session.status] || "status-chip-steel"}`}>{session.status.replace(/_/g, " ")}</span>
+                  </div>
+                  <div className="mt-2 text-xs text-steel-500">{formatTime(session.updatedAt)}</div>
                 </button>
-              )) : <div className="text-sm text-steel-600">No quote sessions yet.</div>}
+              )) : <div className="text-sm text-steel-600">No quote workflows yet.</div>}
             </div>
           </div>
 

@@ -23,7 +23,7 @@ type BuyerMessage = {
 };
 
 type BuyerInboxProps = {
-  onStartQuote?: (payload: { buyerName: string; buyerEmail: string; rfqText: string }) => Promise<void> | void;
+  onStartQuote?: (payload: { sourceMessageId: string; buyerName: string; buyerEmail: string; rfqText: string }) => Promise<void> | void;
 };
 
 export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
@@ -249,16 +249,17 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                       <button
                         className="btn-secondary mt-2"
                         onClick={async () => {
-                          setQuoteInfo("Opening quote workspace...");
+                          setQuoteInfo("Opening quote workflow...");
                           try {
                             await onStartQuote({
+                              sourceMessageId: m.id,
                               buyerName: selectedBuyer.companyName,
                               buyerEmail: selectedBuyer.email,
                               rfqText: m.bodyText
                             });
-                            setQuoteInfo("Quote workspace prefilled from inbound request.");
+                            setQuoteInfo("Quote workflow opened from inbound request.");
                           } catch (err) {
-                            setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workspace");
+                            setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
                           }
                         }}
                       >

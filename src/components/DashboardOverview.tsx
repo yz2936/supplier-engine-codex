@@ -188,7 +188,7 @@ function StockReadiness({ healthyPercent, totalSkus, atRisk }: { healthyPercent:
 export function DashboardOverview({
   onNavigateView
 }: {
-  onNavigateView?: (view: "workspace" | "inventory" | "sourcing" | "buyers" | "quotes") => void;
+  onNavigateView?: (view: "quote_desk" | "inventory" | "sourcing" | "buyers" | "quotes") => void;
 }) {
   const [data, setData] = useState<DashboardPayload>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -232,7 +232,7 @@ export function DashboardOverview({
       title: string;
       detail: string;
       cta: string;
-      view: "workspace" | "inventory" | "sourcing" | "buyers" | "quotes";
+      view: "quote_desk" | "inventory" | "sourcing" | "buyers" | "quotes";
     }> = [];
 
     if (data.kpis.inboundLast7d > 0) {
@@ -262,8 +262,8 @@ export function DashboardOverview({
     items.push({
       title: "Start a new quote",
       detail: "Move a qualified sourcing request into pricing and quote generation.",
-      cta: "Open Workspace",
-      view: "workspace"
+      cta: "Open Quote Desk",
+      view: "quote_desk"
     });
 
     return items.slice(0, 4);

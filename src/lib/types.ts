@@ -114,7 +114,7 @@ export type QuoteWorkflowStage =
   | "rejected"
   | "error";
 
-export type QuoteWorkflowStatus = "active" | "awaiting_approval" | "completed" | "rejected" | "error";
+export type QuoteWorkflowStatus = "active" | "saved" | "awaiting_approval" | "completed" | "rejected" | "discarded" | "error";
 
 export type QuoteAgentActivity = {
   id: string;
@@ -209,6 +209,10 @@ export type QuoteAgentSession = {
   sourceMessageId?: string;
   sourceMessageSubject?: string;
   rfqText?: string;
+  marginPercent?: number;
+  savedQuoteId?: string;
+  savedAt?: string;
+  discardedAt?: string;
   messages: QuoteConversationMessage[];
   cards: QuoteUiCard[];
   activities: QuoteAgentActivity[];

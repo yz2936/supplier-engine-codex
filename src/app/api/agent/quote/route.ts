@@ -21,7 +21,14 @@ export async function POST(req: Request) {
   if (!auth.ok) return auth.response;
 
   try {
-    const body = await req.json().catch(() => ({} as { sessionId?: string; command?: string }));
+    const body = await req.json().catch(() => ({} as {
+      sessionId?: string;
+      command?: string;
+      sourceMessageId?: string;
+      buyerName?: string;
+      buyerEmail?: string;
+      rfqText?: string;
+    }));
     const command = String(body.command ?? "").trim();
     const sessionId = String(body.sessionId ?? "").trim();
 
@@ -31,7 +38,12 @@ export async function POST(req: Request) {
 
     const session = await mutateData(async (data) => {
       if (!sessionId) {
-        const created = await createQuoteAgentSession(data, auth.user, command);
+        const created = await createQuoteAgentSession(data, auth.user, command, {
+          sourceMessageId: body.sourceMessageId,
+          buyerName: body.buyerName,
+          buyerEmail: body.buyerEmail,
+          rfqText: body.rfqText
+        });
         data.quoteAgentSessions = [created, ...(data.quoteAgentSessions || [])].slice(0, 100);
         return created;
       }

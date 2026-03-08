@@ -9,6 +9,7 @@ import {
   AppUser,
   BuyerMessage,
   MatchResult,
+  Quote,
   QuoteAgentActivity,
   QuoteAgentSession,
   QuoteApprovalRequest,
@@ -52,6 +53,39 @@ const buildMeta = (session: QuoteAgentSession): QuoteDraftMeta => ({
   freightTerms: "Packed for sea freight",
   notes: ""
 });
+
+const rebuildDraft = (session: QuoteAgentSession, nextMarginPercent?: number, updates?: Partial<QuoteAgentSession["quoteDraft"]>) => {
+  if (!session.quoteDraft) return session;
+  const previousMargin = Math.max(0, session.marginPercent ?? 12);
+  const marginPercent = Math.max(0, nextMarginPercent ?? previousMargin);
+  const prevMultiplier = 1 + previousMargin / 100;
+  const nextMultiplier = 1 + marginPercent / 100;
+  const sourceLines = updates?.lines ?? session.quoteDraft.lines;
+  const nextLines = sourceLines.map((line) => {
+    const normalizedBaseUnitPrice = prevMultiplier > 0 ? line.unitPrice / prevMultiplier : line.unitPrice;
+    const unitPrice = normalizedBaseUnitPrice * nextMultiplier;
+    return {
+      ...line,
+      unitPrice,
+      extendedPrice: unitPrice * line.quantity
+    };
+  });
+  const total = quoteTotal(nextLines);
+  const eta = updates?.eta ?? session.quoteDraft.eta;
+  const subject = updates?.subject ?? session.quoteDraft.subject;
+  const body = draftQuoteText(session.customerName || "Buyer", nextLines, total, { ...buildMeta(session), eta, subject });
+  return {
+    ...session,
+    marginPercent,
+    quoteDraft: {
+      lines: nextLines,
+      total,
+      subject,
+      body,
+      eta
+    }
+  };
+};
 
 const latestInboundCandidate = async (data: AppData, user: AppUser) => {
   const inbound = [...data.buyerMessages]
@@ -181,8 +215,15 @@ const stageFromApproval = (approval?: QuoteApprovalRequest): QuoteWorkflowStage 
   return "awaiting_approval";
 };
 
-export const createQuoteAgentSession = async (data: AppData, user: AppUser, command: string) => {
-  const sourceMessage = await latestInboundCandidate(data, user);
+export const createQuoteAgentSession = async (
+  data: AppData,
+  user: AppUser,
+  command: string,
+  seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string }
+) => {
+  const sourceMessage = seed?.sourceMessageId
+    ? data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
+    : await latestInboundCandidate(data, user);
   const session: QuoteAgentSession = {
     id: crypto.randomUUID(),
     createdAt: nowIso(),
@@ -191,6 +232,7 @@ export const createQuoteAgentSession = async (data: AppData, user: AppUser, comm
     status: "active",
     stage: "idle",
     title: "Conversation quote session",
+    marginPercent: 12,
     messages: [newMessage("user", command)],
     cards: [],
     activities: [newActivity("user", "step", command)]
@@ -204,9 +246,9 @@ export const createQuoteAgentSession = async (data: AppData, user: AppUser, comm
     return session;
   }
 
-  const buyerEmail = sourceMessage.fromEmail;
-  const buyerName = data.buyers.find((buyer) => buyer.id === sourceMessage.buyerId)?.companyName || "Buyer";
-  const rfqText = sourceMessage.bodyText;
+  const buyerEmail = seed?.buyerEmail?.trim() || sourceMessage.fromEmail;
+  const buyerName = seed?.buyerName?.trim() || data.buyers.find((buyer) => buyer.id === sourceMessage.buyerId)?.companyName || "Buyer";
+  const rfqText = seed?.rfqText?.trim() || sourceMessage.bodyText;
   const extracted = await parseRFQ(rfqText, "openai");
   const matches = findBestMatches(extracted, data.inventory);
   const quoteLines = buildQuoteLines(matches, data.surcharges, 12);
@@ -284,18 +326,27 @@ export const applyConversationCommand = async (data: AppData, user: AppUser, ses
   const lower = command.toLowerCase();
 
   if (/show .*buyer email|show .*email again/.test(lower)) {
-    next.messages.push(newMessage("assistant", "Showing the buyer email again in the workspace cards."));
+    next.messages.push(newMessage("assistant", "Showing the buyer email again in the quote thread cards."));
     return next;
+  }
+
+  const marginMatch = lower.match(/(?:set|change|apply|use).{0,24}margin(?: to)?\s+(\d+(?:\.\d+)?)\s*%?/);
+  if (marginMatch && next.quoteDraft) {
+    const marginPercent = Number(marginMatch[1]);
+    const rebased = rebuildDraft(next, marginPercent);
+    rebased.cards = updateDraftCard(rebased);
+    rebased.messages.push(newMessage("assistant", `Updated the quote margin to ${marginPercent}%. Pricing and totals have been recalculated.`));
+    rebased.activities.push(newActivity("agent", "step", `Updated quote margin to ${marginPercent}%`));
+    return rebased;
   }
 
   if (/don'?t include .*out[- ]of[- ]stock|exclude .*out[- ]of[- ]stock/.test(lower) && next.quoteDraft) {
     const lines = next.quoteDraft.lines.filter((line) => line.stockStatus !== "red");
-    const total = quoteTotal(lines);
-    next.quoteDraft = { ...next.quoteDraft, lines, total, body: draftQuoteText(next.customerName || "Buyer", lines, total, buildMeta(next)) };
-    next.cards = updateDraftCard(next);
-    next.messages.push(newMessage("assistant", `Removed out-of-stock lines. ${lines.length} line item${lines.length === 1 ? "" : "s"} remain in the draft quote.`));
-    next.activities.push(newActivity("agent", "step", "Removed out-of-stock items from the proposed quote"));
-    return next;
+    const revised = rebuildDraft(next, next.marginPercent, { lines });
+    revised.cards = updateDraftCard(revised);
+    revised.messages.push(newMessage("assistant", `Removed out-of-stock lines. ${lines.length} line item${lines.length === 1 ? "" : "s"} remain in the draft quote.`));
+    revised.activities.push(newActivity("agent", "step", "Removed out-of-stock items from the proposed quote"));
+    return revised;
   }
 
   const nthMatch = lower.match(/use the (\d+)(?:st|nd|rd|th)? line item only/);
@@ -308,12 +359,11 @@ export const applyConversationCommand = async (data: AppData, user: AppUser, ses
       return next;
     }
     const lines = [selected];
-    const total = quoteTotal(lines);
-    next.quoteDraft = { ...next.quoteDraft, lines, total, body: draftQuoteText(next.customerName || "Buyer", lines, total, buildMeta(next)) };
-    next.cards = updateDraftCard(next);
-    next.messages.push(newMessage("assistant", `I narrowed the quote to line item ${nthMatch[1]} only.`));
-    next.activities.push(newActivity("agent", "step", `Reduced quote scope to line item ${nthMatch[1]}`));
-    return next;
+    const revised = rebuildDraft(next, next.marginPercent, { lines });
+    revised.cards = updateDraftCard(revised);
+    revised.messages.push(newMessage("assistant", `I narrowed the quote to line item ${nthMatch[1]} only.`));
+    revised.activities.push(newActivity("agent", "step", `Reduced quote scope to line item ${nthMatch[1]}`));
+    return revised;
   }
 
   const qtyMatch = lower.match(/change (?:line )?(\d+)\s+quantity to\s+(\d+(?:\.\d+)?)/);
@@ -328,24 +378,22 @@ export const applyConversationCommand = async (data: AppData, user: AppUser, ses
     const lines = next.quoteDraft.lines.map((line, idx) => idx === index ? {
       ...line,
       quantity,
-      extendedPrice: quantity * line.unitPrice
     } : line);
-    const total = quoteTotal(lines);
-    next.quoteDraft = { ...next.quoteDraft, lines, total, body: draftQuoteText(next.customerName || "Buyer", lines, total, buildMeta(next)) };
-    next.cards = updateDraftCard(next);
-    next.messages.push(newMessage("assistant", `Updated line ${qtyMatch[1]} quantity to ${quantity}.`));
-    next.activities.push(newActivity("agent", "step", `Adjusted line ${qtyMatch[1]} quantity to ${quantity}`));
-    return next;
+    const revised = rebuildDraft(next, next.marginPercent, { lines });
+    revised.cards = updateDraftCard(revised);
+    revised.messages.push(newMessage("assistant", `Updated line ${qtyMatch[1]} quantity to ${quantity}.`));
+    revised.activities.push(newActivity("agent", "step", `Adjusted line ${qtyMatch[1]} quantity to ${quantity}`));
+    return revised;
   }
 
   const etaMatch = lower.match(/change (?:the )?lead time to\s+(.+)/);
   if (etaMatch && next.quoteDraft) {
     const eta = etaMatch[1].trim().replace(/\.$/, "");
-    next.quoteDraft = { ...next.quoteDraft, eta, body: draftQuoteText(next.customerName || "Buyer", next.quoteDraft.lines, next.quoteDraft.total, { ...buildMeta(next), eta }) };
-    next.cards = updateDraftCard(next);
-    next.messages.push(newMessage("assistant", `Updated lead time to ${eta}.`));
-    next.activities.push(newActivity("agent", "step", `Updated proposed lead time to ${eta}`));
-    return next;
+    const revised = rebuildDraft(next, next.marginPercent, { eta });
+    revised.cards = updateDraftCard(revised);
+    revised.messages.push(newMessage("assistant", `Updated lead time to ${eta}.`));
+    revised.activities.push(newActivity("agent", "step", `Updated proposed lead time to ${eta}`));
+    return revised;
   }
 
   if (/more concise email|shorter email|draft a more concise email/.test(lower) && next.quoteDraft) {
@@ -358,6 +406,13 @@ export const applyConversationCommand = async (data: AppData, user: AppUser, ses
     next.messages.push(newMessage("assistant", "I tightened the email copy and kept the commercial content intact."));
     next.activities.push(newActivity("agent", "step", "Condensed the outbound draft email"));
     return next;
+  }
+
+  if (/save (?:this )?(?:quote|workflow|draft)|save draft/.test(lower) && next.quoteDraft) {
+    const saved = saveQuoteDraftSession(data, user, next);
+    saved.messages.push(newMessage("assistant", "Saved this quote workflow as a draft. It will stay available in Quote History and in this session list."));
+    saved.activities.push(newActivity("agent", "step", "Saved quote workflow as draft"));
+    return saved;
   }
 
   if (/approve/.test(lower) && next.approval?.status === "pending") {
@@ -374,9 +429,55 @@ export const applyConversationCommand = async (data: AppData, user: AppUser, ses
     return next;
   }
 
+  if (/discard (?:this )?(?:quote|workflow|session)|close (?:this )?workflow/.test(lower)) {
+    const discarded = discardQuoteSession(next);
+    discarded.messages.push(newMessage("assistant", "Discarded this quote workflow. It will remain in the audit trail but is closed from active work."));
+    discarded.activities.push(newActivity("agent", "step", "Discarded quote workflow"));
+    return discarded;
+  }
+
   next.messages.push(newMessage("assistant", "I kept the current quote session intact. You can ask me to show the buyer email, revise a line item, change lead time, exclude out-of-stock items, or approve the send."));
   return next;
 };
+
+export const saveQuoteDraftSession = (data: AppData, user: AppUser, session: QuoteAgentSession) => {
+  if (!session.quoteDraft) return session;
+  const now = nowIso();
+  const quote: Quote = {
+    id: session.savedQuoteId || crypto.randomUUID(),
+    customerName: session.customerName || "Buyer",
+    createdByUserId: user.id,
+    itemsQuoted: session.quoteDraft.lines,
+    totalPrice: session.quoteDraft.total,
+    status: "Draft",
+    createdAt: session.savedAt || now,
+    sentToEmail: session.buyerEmail,
+    lastSentSubject: session.quoteDraft.subject
+  };
+
+  const existingIndex = data.quotes.findIndex((candidate) => candidate.id === quote.id);
+  if (existingIndex === -1) data.quotes.unshift(quote);
+  else data.quotes[existingIndex] = { ...data.quotes[existingIndex], ...quote };
+
+  return {
+    ...session,
+    updatedAt: now,
+    status: "saved" as const,
+    savedQuoteId: quote.id,
+    savedAt: now
+  };
+};
+
+export const discardQuoteSession = (session: QuoteAgentSession): QuoteAgentSession => ({
+  ...session,
+  updatedAt: nowIso(),
+  status: "discarded",
+  stage: session.stage === "sent" ? "sent" : "rejected",
+  discardedAt: nowIso(),
+  approval: session.approval?.status === "pending"
+    ? { ...session.approval, status: "rejected" }
+    : session.approval
+});
 
 export const approveQuoteSend = async (_data: AppData, user: AppUser, session: QuoteAgentSession) => {
   if (!session.approval || session.approval.status !== "pending" || !session.quoteDraft || !session.buyerEmail) {

@@ -9,7 +9,6 @@ import { EmailIntegrationSettings } from "@/components/EmailIntegrationSettings"
 import { InventoryCatalogManager } from "@/components/InventoryCatalogManager";
 import { InventoryUploader } from "@/components/InventoryUploader";
 import { QuoteHistory } from "@/components/QuoteHistory";
-import { ResultsTable } from "@/components/ResultsTable";
 import { SourcingHub } from "@/components/SourcingHub";
 import { canGenerateQuotes, canUploadInventory, roleLabel } from "@/lib/auth";
 import { draftQuoteText, money } from "@/lib/format";
@@ -28,7 +27,7 @@ type AppUser = {
   createdAt: string;
 };
 
-type View = "dashboard" | "quote_desk" | "workspace" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
+type View = "dashboard" | "quote_desk" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
 type AgentStage = "idle" | "validating" | "parsing" | "awaiting_approval" | "ready";
 type AgentActivity = {
   id: number;
@@ -126,14 +125,6 @@ export default function HomePage() {
         </svg>
       );
     }
-    if (view === "workspace") {
-      return (
-        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M4 4h12v12H4z" />
-          <path d="M7 8h6M7 12h4" />
-        </svg>
-      );
-    }
     if (view === "quote_desk") {
       return (
         <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -186,12 +177,11 @@ export default function HomePage() {
   const viewMeta: Record<View, { label: string; hint: string }> = {
     dashboard: { label: "Dashboard", hint: "Inbound, inventory, and supplier health at a glance" },
     quote_desk: { label: "Quote Desk", hint: "Conversation-first quoting with approvals and audit trail" },
-    workspace: { label: "Workspace", hint: "RFQ parsing, pricing, and quote delivery" },
     inventory: { label: "Inventory", hint: "Stock control and row-level updates" },
     sourcing: { label: "Sourcing", hint: "Route shortages to upstream suppliers" },
     buyers: { label: "Buyers", hint: "Inbound buyer messages and RFQ intake" },
     quotes: { label: "Quotes", hint: "Quote history and conversion tracking" },
-    settings: { label: "Settings", hint: "Account and workspace preferences" }
+    settings: { label: "Settings", hint: "Account and platform preferences" }
   };
 
   useEffect(() => {
@@ -259,7 +249,7 @@ export default function HomePage() {
   const agentStatusMeta: Record<AgentStage, { label: string; detail: string }> = {
     idle: {
       label: "Waiting for intake",
-      detail: "Add an RFQ and the workspace agent will begin validating, matching, and pricing automatically."
+      detail: "Add an RFQ and the quote agent will begin validating, matching, and pricing automatically."
     },
     validating: {
       label: "Reviewing intake",
@@ -407,7 +397,7 @@ export default function HomePage() {
           ? "Agent merged the uploaded intake files into one RFQ package."
           : source === "auto"
             ? "Agent detected an updated RFQ and started a fresh run."
-            : "Agent started a manual workspace run."
+            : "Agent started a manual quote run."
     );
     pushAgentActivity("Checking quantity units, dimensional specs, and required product categories.");
 
@@ -475,7 +465,7 @@ export default function HomePage() {
         ...prev,
         ...extracted.map((entry) => ({ name: entry.name, kind: entry.kind }))
       ]);
-      setRfqFileStatus(`Loaded ${extracted.length} intake file${extracted.length === 1 ? "" : "s"} into the RFQ workspace.`);
+      setRfqFileStatus(`Loaded ${extracted.length} intake file${extracted.length === 1 ? "" : "s"} into the RFQ quote flow.`);
       if (autoParse && canGenerateQuotes(role)) {
         await runWorkspaceAgent(nextRfq, marginPercent, "files");
       }
@@ -542,20 +532,27 @@ export default function HomePage() {
   }, [lines.length, marginPercent, rfqText, runWorkspaceAgent, saveQuote]);
 
   const startQuoteFromBuyerMessage = useCallback(async (
-    payload: { buyerName: string; buyerEmail: string; rfqText: string }
+    payload: { sourceMessageId: string; buyerName: string; buyerEmail: string; rfqText: string }
   ) => {
-    const buyer = payload.buyerName?.trim() || "Buyer";
     const rfq = payload.rfqText?.trim();
     if (!rfq) throw new Error("Inbound message is empty");
 
-    setActiveView("workspace");
-    setCustomerName(buyer);
-    setBuyerName(buyer);
-    setBuyerEmail(payload.buyerEmail?.trim() || "");
-    setRfqText(rfq);
-    setSendStatus("");
-    await runWorkspaceAgent(rfq, marginPercent, "buyer");
-  }, [marginPercent, runWorkspaceAgent]);
+    setActiveView("quote_desk");
+    const res = await fetch("/api/agent/quote", {
+      credentials: "include",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command: `Quote this buyer request from ${payload.buyerEmail}.`,
+        sourceMessageId: payload.sourceMessageId,
+        buyerName: payload.buyerName,
+        buyerEmail: payload.buyerEmail,
+        rfqText: payload.rfqText
+      })
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || "Failed to open quote workflow");
+  }, []);
 
   useEffect(() => {
     if (!autoParse || !canGenerateQuotes(role)) return;
@@ -582,7 +579,7 @@ export default function HomePage() {
   }, []);
 
   if (loadingUser) {
-    return <main className="mx-auto min-h-screen max-w-7xl p-6"><div className="border border-steel-200/80 bg-white/85 p-4">Loading workspace...</div></main>;
+    return <main className="mx-auto min-h-screen max-w-7xl p-6"><div className="border border-steel-200/80 bg-white/85 p-4">Loading platform...</div></main>;
   }
 
   if (!user) {
@@ -675,7 +672,7 @@ export default function HomePage() {
           <div className="landing-card">
             <div className="section-title">For commercial teams</div>
             <div className="mt-2 text-xl font-semibold text-steel-900">Move from inbound email to priced quote without losing technical detail.</div>
-            <div className="mt-2 text-sm text-steel-600">The workspace preserves spec fidelity while keeping the operator focused on the next commercial decision.</div>
+            <div className="mt-2 text-sm text-steel-600">The quote desk preserves spec fidelity while keeping the operator focused on the next commercial decision.</div>
           </div>
         </section>
 
@@ -705,8 +702,8 @@ export default function HomePage() {
           <div id="auth-entry" className="landing-card space-y-4">
             <div>
               <div className="section-title">Tool access</div>
-              <h2 className="mt-2 text-2xl font-semibold text-steel-900">Enter the quoting workspace</h2>
-              <p className="mt-1 text-sm text-steel-600">Use your work account to access the RFQ command deck, sourcing workflow, and buyer inbox.</p>
+              <h2 className="mt-2 text-2xl font-semibold text-steel-900">Enter the quoting platform</h2>
+              <p className="mt-1 text-sm text-steel-600">Use your work account to access the quote desk, sourcing workflow, and buyer inbox.</p>
             </div>
 
             <div className="flex gap-2">
@@ -779,7 +776,7 @@ export default function HomePage() {
       <main className="mx-auto min-h-screen max-w-xl p-6">
         <div className="space-y-4 border border-steel-200/80 bg-white/85 p-4">
           <h1 className="text-2xl font-bold">Onboarding</h1>
-          <p className="text-sm text-steel-700">Set your profile so the workspace matches your role and permissions.</p>
+          <p className="text-sm text-steel-700">Set your profile so the platform matches your role and permissions.</p>
           <input className="input" value={onboardingName} onChange={(e) => setOnboardingName(e.target.value)} placeholder="Your full name" />
           <input className="input" value={onboardingCompany} onChange={(e) => setOnboardingCompany(e.target.value)} placeholder="Company name" />
           <select className="input" value={onboardingRole} onChange={(e) => setOnboardingRole(e.target.value as UserRole)}>
@@ -869,7 +866,6 @@ export default function HomePage() {
             {([
               "dashboard",
               "quote_desk",
-              "workspace",
               "inventory",
               "sourcing",
               ...(role === "sales_manager" ? ["buyers"] : []),
@@ -937,14 +933,10 @@ export default function HomePage() {
                 <button
                   className="btn-secondary ml-auto px-2.5 py-1 text-xs"
                   onClick={() => {
-                    setActiveView("workspace");
-                    setRfqText("");
-                    setLines([]);
-                    setTotal(0);
-                    setError("");
+                    setActiveView("quote_desk");
                   }}
                 >
-                  + New RFQ
+                  + New Quote
                 </button>
               </div>
             </div>
@@ -956,357 +948,7 @@ export default function HomePage() {
           )}
 
           {activeView === "quote_desk" && (
-            <ConversationQuoteDesk onOpenWorkspace={() => setActiveView("workspace")} />
-          )}
-
-          {activeView === "workspace" && (
-            <div className="space-y-4">
-              <div className="workspace-shell space-y-4">
-                <div className="relative z-10 flex flex-col gap-4 border-b border-steel-200/70 pb-4 xl:flex-row xl:items-end xl:justify-between">
-                  <div className="space-y-2">
-                    <div className="section-title">Workspace</div>
-                    <div className="font-['Sora'] text-[1.7rem] font-semibold tracking-[-0.03em] text-steel-950">RFQ command deck</div>
-                    <p className="max-w-2xl text-sm text-steel-600">
-                      The agent handles parsing and comparison in sequence so the operator only steps in at decision points.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 xl:min-w-[420px]">
-                    <div className="metric-tile">
-                      <div className="section-title">Source</div>
-                      <div className="mt-1 text-lg font-bold text-steel-900">{rfqSourceFiles.length || (rfqText.trim() ? 1 : 0)}</div>
-                    </div>
-                    <div className="metric-tile">
-                      <div className="section-title">Parsed</div>
-                      <div className="mt-1 text-lg font-bold text-steel-900">{lines.length}</div>
-                    </div>
-                    <div className="metric-tile">
-                      <div className="section-title">Need source</div>
-                      <div className="mt-1 text-lg font-bold text-rose-700">{stockSummary.red}</div>
-                    </div>
-                    <div className="metric-tile">
-                      <div className="section-title">Quote total</div>
-                      <div className="mt-1 text-lg font-bold text-teal-800">{money(total)}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <section className="agent-rail text-white">
-                  <div className="relative z-10 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="agent-dot mt-1 shrink-0" />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="section-title !text-[rgba(255,255,255,0.55)]">Live agent</span>
-                          <span className={`status-chip ${agentNeedsApproval ? "status-chip-amber" : agentReadyForSend ? "status-chip-teal" : "status-chip-steel"}`}>
-                            {agentStatusMeta[agentStage].label}
-                          </span>
-                        </div>
-                        <div className="mt-1 truncate text-sm font-medium text-white">
-                          {latestAgentActivity?.text || "Waiting for a request package to enter the deck."}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-300">{agentStatusMeta[agentStage].detail}</div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-3 xl:items-end">
-                      <div className="flex flex-wrap gap-2">
-                        {agentFlowSteps.map((step) => {
-                          const active = step.key === agentStage || (step.key === "ready" && agentReadyForSend);
-                          return (
-                            <span key={step.key} className={`agent-step ${active ? "agent-step-active" : ""}`}>
-                              {step.label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button className="btn" onClick={() => void runWorkspaceAgent(rfqText, marginPercent, "manual")} disabled={!canGenerateQuotes(role) || busy}>
-                          {busy ? "Agent Running..." : "Run Agent"}
-                        </button>
-                        {agentNeedsApproval && (
-                          <button className="btn-secondary" onClick={approveAgentReview} disabled={!lines.length}>
-                            Approve Pricing
-                          </button>
-                        )}
-                        <button className="btn-ghost text-white" onClick={() => setAutoParse((v) => !v)} disabled={!canGenerateQuotes(role)}>
-                          {autoParse ? "Auto-Run On" : "Auto-Run Off"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel-industrial">
-                  <div className="mb-3 flex items-center gap-3">
-                    <span className="step-badge">Step 1</span>
-                    <div>
-                      <div className="text-sm font-semibold text-steel-900">Load the request</div>
-                      <div className="text-xs text-steel-600">Bring in the request package, confirm who it is from, and let the agent take over.</div>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.85fr)]">
-                    <div className="space-y-3">
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <input className="input" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
-                        <input className="input" placeholder="Buyer name" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
-                        <input className="input" placeholder="Buyer email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
-                      </div>
-                      <div className="industrial-card">
-                        <div className="mb-2 flex items-center justify-between">
-                          <div>
-                            <div className="section-title">Unified intake</div>
-                            <div className="text-sm font-semibold text-steel-900">RFQ source text</div>
-                          </div>
-                          <span className={`status-chip ${rfqText.trim() ? "status-chip-teal" : "status-chip-steel"}`}>
-                            {rfqText.trim() ? "Loaded" : "Empty"}
-                          </span>
-                        </div>
-                        <textarea
-                          className="input min-h-[240px] border-0 bg-transparent px-0 pb-0 pt-1 font-mono text-xs shadow-none focus:ring-0"
-                          value={rfqText}
-                          onChange={(e) => setRfqText(e.target.value)}
-                          placeholder="Paste the RFP or inbound buyer request here"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="industrial-card">
-                        <div className="section-title">Active source</div>
-                        <div className="mt-1 text-base font-semibold text-steel-900">{activeSourceLabel}</div>
-                        <div className="mt-1 break-all text-sm text-steel-600">{activeSourceEmail}</div>
-                      </div>
-                      <div className="industrial-muted">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-semibold text-steel-900">Source files</div>
-                            <div className="mt-1 text-xs text-steel-600">PDF, Excel, Word, email, and text documents merge into one intake stream.</div>
-                          </div>
-                          <span className="status-chip status-chip-steel">{rfqSourceFiles.length} files</span>
-                        </div>
-                        <label className="btn-secondary mt-3 block cursor-pointer text-center">
-                          {rfqFileBusy ? "Loading..." : "Add Intake Files"}
-                          <input
-                            type="file"
-                            multiple
-                            accept={RFQ_FILE_ACCEPT}
-                            className="hidden"
-                            disabled={rfqFileBusy}
-                            onChange={(e) => {
-                              void loadRfqFiles(e.target.files);
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                        {!!rfqSourceFiles.length && (
-                          <div className="mt-3 space-y-2">
-                            {rfqSourceFiles.map((file) => (
-                              <div key={`${file.name}-${file.kind}`} className="flex items-center justify-between gap-3 rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-xs text-steel-700">
-                                <span className="truncate">{file.name}</span>
-                                <span className="shrink-0 uppercase tracking-wide text-steel-500">{file.kind}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {rfqFileStatus && <div className="mt-3 text-xs text-steel-600">{rfqFileStatus}</div>}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel-industrial">
-                  <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="step-badge">Step 2</span>
-                      <div>
-                        <div className="text-sm font-semibold text-steel-900">Review priced lines</div>
-                        <div className="text-xs text-steel-600">Inventory comparison and pricing land here. Only review and routing actions stay in focus.</div>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className={`status-chip ${busy ? "status-chip-amber" : agentNeedsApproval ? "status-chip-amber" : agentReadyForSend ? "status-chip-teal" : "status-chip-steel"}`}>
-                        {busy ? "Processing" : agentNeedsApproval ? "Approval Needed" : agentReadyForSend ? "Ready to Send" : "Waiting"}
-                      </span>
-                      <button
-                        className="btn-ghost"
-                        onClick={() => {
-                          setCustomerName("");
-                          setRfqText("");
-                          setBuyerEmail("");
-                          setBuyerName("");
-                          setLines([]);
-                          setTotal(0);
-                          setError("");
-                          setSendStatus("");
-                          setRfqSourceFiles([]);
-                          setRfqFileStatus("");
-                          resetAgentWorkflow();
-                        }}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 xl:grid-cols-[280px_minmax(0,1fr)]">
-                    <div className="space-y-3">
-                      <div className="industrial-card">
-                        <div className="flex items-center justify-between text-sm font-medium text-steel-800">
-                          <span>Margin</span>
-                          <span>{marginPercent}%</span>
-                        </div>
-                        <input type="range" min={0} max={40} value={marginPercent} className="mt-3 w-full" onChange={(e) => setMarginPercent(Number(e.target.value))} disabled={!canGenerateQuotes(role)} />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="metric-tile">
-                          <div className="section-title">In stock</div>
-                          <div className="mt-1 text-xl font-bold text-emerald-700">{stockSummary.green}</div>
-                        </div>
-                        <div className="metric-tile">
-                          <div className="section-title">Need source</div>
-                          <div className="mt-1 text-xl font-bold text-rose-700">{stockSummary.red}</div>
-                        </div>
-                      </div>
-                      <div className="industrial-muted">
-                        <div className="section-title">Agent feed</div>
-                        <div className="mt-2 space-y-2">
-                          {agentActivities.length ? agentActivities.slice(-3).map((activity) => (
-                            <div key={activity.id} className="rounded-xl border border-white/75 bg-white/70 px-3 py-2 text-sm text-steel-700">
-                              {activity.text}
-                            </div>
-                          )) : <div className="text-sm text-steel-500">The agent feed will populate as soon as the RFQ starts processing.</div>}
-                        </div>
-                      </div>
-                      {error && <p className="text-sm text-rose-600">{error}</p>}
-                    </div>
-                    <div className="industrial-card">
-                      <ResultsTable
-                        lines={lines}
-                        onSourceItem={(line) => {
-                          setSourcingSeed(null);
-                          setSourcingQuoteSeed({
-                            key: `manual-${line.sku ?? line.description}-${Date.now()}`,
-                            sourceContext: "quote_shortage",
-                            reason: line.stockStatus === "yellow" ? "low_stock" : "out_of_stock",
-                            sku: line.sku,
-                            productType: line.requested.category,
-                            grade: line.requested.grade,
-                            dimension: line.requested.dimensionSummary || line.requested.rawSpec,
-                            quantity: line.quantity,
-                            unit: line.unit,
-                            requestedLength: line.requested.length
-                          });
-                          setActiveView("sourcing");
-                        }}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel-industrial">
-                  <div className="mb-3 flex items-center gap-3">
-                    <span className="step-badge">Step 3</span>
-                    <div>
-                      <div className="text-sm font-semibold text-steel-900">Send the quote</div>
-                      <div className="text-xs text-steel-600">This stage unlocks only after approval so the commercial close stays clean and deliberate.</div>
-                    </div>
-                  </div>
-                  <div className={`grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px] ${agentReadyForSend ? "" : "opacity-60"}`}>
-                    <div className="space-y-3">
-                      <div className="industrial-card">
-                        <input className="input" placeholder="Email subject" value={draftSubject} onChange={(e) => setDraftSubject(e.target.value)} />
-                        <textarea className="input mt-3 min-h-20" placeholder="Email intro" value={draftIntro} onChange={(e) => setDraftIntro(e.target.value)} />
-                      </div>
-                      <details className="industrial-muted">
-                        <summary className="cursor-pointer text-sm font-medium text-steel-900">Advanced commercial terms</summary>
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <input className="input" placeholder="ETA" value={draftEta} onChange={(e) => setDraftEta(e.target.value)} />
-                          <input className="input" type="number" min={1} value={draftValidDays} onChange={(e) => setDraftValidDays(Number(e.target.value || 7))} />
-                          <input className="input" placeholder="Incoterm" value={draftIncoterm} onChange={(e) => setDraftIncoterm(e.target.value)} />
-                          <input className="input" placeholder="Payment terms" value={draftPaymentTerms} onChange={(e) => setDraftPaymentTerms(e.target.value)} />
-                          <input className="input sm:col-span-2" placeholder="Freight terms" value={draftFreightTerms} onChange={(e) => setDraftFreightTerms(e.target.value)} />
-                          <textarea className="input min-h-16 sm:col-span-2" placeholder="Additional notes" value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} />
-                        </div>
-                      </details>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="industrial-muted text-sm">
-                        <div className="section-title">Send checklist</div>
-                        <div className="mt-2 space-y-2 text-steel-700">
-                          <div className="flex items-center justify-between gap-2"><span>Buyer email</span><span>{buyerEmail ? "Ready" : "Missing"}</span></div>
-                          <div className="flex items-center justify-between gap-2"><span>Priced lines</span><span>{lines.length ? `${lines.length} ready` : "Pending"}</span></div>
-                          <div className="flex items-center justify-between gap-2"><span>Total</span><span>{total > 0 ? money(total) : "Pending"}</span></div>
-                        </div>
-                      </div>
-                      <div className="industrial-card space-y-2">
-                        <button className="btn-secondary w-full" disabled={!agentReadyForSend || !lines.length} onClick={async () => navigator.clipboard.writeText(draft)}>Copy Draft</button>
-                        <button
-                          className="btn-secondary w-full"
-                          disabled={!agentReadyForSend || !lines.length || !canGenerateQuotes(role)}
-                          onClick={async () => {
-                            const result = await saveQuote();
-                            if (result.ok) alert(result.message);
-                          }}
-                        >
-                          Save Quote
-                        </button>
-                        <button
-                          className="btn w-full"
-                          disabled={!agentReadyForSend || !lines.length || !buyerEmail || !canGenerateQuotes(role)}
-                          onClick={async () => {
-                            setSendStatus("Sending...");
-                            try {
-                              const res = await fetch("/api/quote-email", {
-                                credentials: "include",
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  buyerEmail,
-                                  customerName,
-                                  lines,
-                                  total,
-                                  meta: draftMeta
-                                })
-                              });
-
-                              const raw = await res.text();
-                              let payload: { message?: string; error?: string } = {};
-                              try {
-                                payload = raw ? JSON.parse(raw) : {};
-                              } catch {
-                                payload = { error: raw || "Unexpected server response" };
-                              }
-
-                              setSendStatus(res.ok ? payload.message || "Sent" : payload.error || "Failed to send");
-                            } catch (err) {
-                              setSendStatus(err instanceof Error ? err.message : "Failed to send");
-                            }
-                          }}
-                        >
-                          Send Quote Email
-                        </button>
-                        <button className="btn-ghost w-full" onClick={() => setShowDraftPreview((v) => !v)} disabled={!agentReadyForSend || !lines.length}>
-                          {showDraftPreview ? "Hide Draft Preview" : "Show Draft Preview"}
-                        </button>
-                      </div>
-                      {sendStatus && <p className="text-xs text-steel-700">{sendStatus}</p>}
-                    </div>
-                  </div>
-                  {!agentReadyForSend && (
-                    <div className="mt-3 rounded-2xl border border-dashed border-steel-300 bg-steel-50/60 px-4 py-3 text-sm text-steel-600">
-                      Approve the priced lines in Step 2 before quote delivery actions become available.
-                    </div>
-                  )}
-                  {showDraftPreview && (
-                    <div className="industrial-muted mt-3 overflow-hidden">
-                      <div className="border-b border-steel-200/80 px-1 pb-3">
-                        <div className="section-title">Draft preview</div>
-                      </div>
-                      <div className="max-h-[320px] overflow-auto px-1 pt-3 text-xs whitespace-pre-wrap text-steel-700">
-                        {draft}
-                      </div>
-                    </div>
-                  )}
-                </section>
-              </div>
-            </div>
+            <ConversationQuoteDesk />
           )}
 
           {activeView === "inventory" && (
