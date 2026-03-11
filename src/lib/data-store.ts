@@ -235,6 +235,7 @@ const isRetryableDbError = (err: unknown) => {
   return retryCodes.has(code.toUpperCase())
     || msg.includes("timeout")
     || msg.includes("timed out")
+    || msg.includes("query read timeout")
     || msg.includes("econnreset")
     || msg.includes("econnrefused")
     || msg.includes("enotfound")
@@ -271,10 +272,10 @@ const getPool = () => {
       connectionString: dbUrl,
       ssl,
       max: Number(process.env.DB_POOL_MAX || 5),
-      connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 5000),
+      connectionTimeoutMillis: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
       idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
-      query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 10000),
-      statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 10000),
+      query_timeout: Number(process.env.DB_QUERY_TIMEOUT_MS || 30000),
+      statement_timeout: Number(process.env.DB_STATEMENT_TIMEOUT_MS || 30000),
       keepAlive: true
     });
   }
