@@ -3,7 +3,7 @@ import { readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireRole(req, ["sales_manager"]);
+  const auth = await requireRole(req, ["sales_rep", "sales_manager"]);
   if (!auth.ok) return auth.response;
 
   const { id } = await params;

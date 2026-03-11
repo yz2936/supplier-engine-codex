@@ -989,9 +989,9 @@ export default function HomePage() {
           )}
 
           {activeView === "buyers" && (
-            role === "sales_manager"
+            (role === "sales_manager" || role === "sales_rep")
               ? <BuyerInbox onStartQuote={startQuoteFromBuyerMessage} />
-              : <div className="border-t border-steel-200 py-3 text-sm text-steel-700">Only Sales Managers can access buyer routing inbox.</div>
+              : <div className="border-t border-steel-200 py-3 text-sm text-steel-700">Only Sales roles can access buyer routing inbox.</div>
           )}
 
           {activeView === "settings" && (

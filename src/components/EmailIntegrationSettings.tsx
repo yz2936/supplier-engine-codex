@@ -32,7 +32,9 @@ type EmailSettingsResponse = {
 export function EmailIntegrationSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
   const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
   const [smtpPort, setSmtpPort] = useState(587);
   const [smtpSecure, setSmtpSecure] = useState(false);
@@ -95,6 +97,26 @@ export function EmailIntegrationSettings() {
       }
     })();
   }, []);
+
+  const runInboundSync = async () => {
+    setSyncing(true);
+    setSyncStatus("Testing inbound mailbox...");
+    try {
+      const res = await fetch("/api/email/inbound/sync", {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 30 })
+      });
+      const json = await res.json().catch(() => ({} as { error?: string; created?: number; scanned?: number; skipped?: number }));
+      if (!res.ok) throw new Error(json.error || "Inbound sync failed");
+      setSyncStatus(`Inbound sync complete: ${json.created ?? 0} new, ${json.scanned ?? 0} scanned, ${json.skipped ?? 0} skipped.`);
+    } catch (err) {
+      setSyncStatus(err instanceof Error ? err.message : "Inbound sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="panel panel-aurora space-y-3 text-sm">
@@ -238,11 +260,19 @@ export function EmailIntegrationSettings() {
             >
               {saving ? "Saving..." : "Save Email Integration"}
             </button>
+            <button
+              className="btn-secondary"
+              disabled={saving || syncing}
+              onClick={() => void runInboundSync()}
+            >
+              {syncing ? "Syncing..." : "Test Inbound Sync"}
+            </button>
           </div>
         </>
       )}
 
       {status && <div className="text-xs text-steel-700">{status}</div>}
+      {syncStatus && <div className="text-xs text-steel-700">{syncStatus}</div>}
     </div>
   );
 }

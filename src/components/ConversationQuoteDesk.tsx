@@ -238,7 +238,7 @@ export function ConversationQuoteDesk() {
 
   return (
     <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="space-y-4">
         <div className="panel-industrial flex min-h-[760px] flex-col gap-4 overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -272,7 +272,7 @@ export function ConversationQuoteDesk() {
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div className="rounded-[24px] border border-steel-200 bg-white/72 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -526,7 +526,7 @@ export function ConversationQuoteDesk() {
             )}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px_280px]">
             <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
               <div className="section-title">Operator command</div>
               <div className="mt-2 flex flex-col gap-3">
@@ -567,57 +567,39 @@ export function ConversationQuoteDesk() {
                   <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Saved</div>
                   <div className="mt-1 font-semibold text-steel-900">{activeSession?.savedAt ? "Yes" : "No"}</div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="landing-card">
-            <div className="section-title">Quote workflows</div>
-            <div className="mt-3 space-y-2">
-              {visibleSessions.length ? visibleSessions.map((session) => (
-                <button
-                  key={session.id}
-                  className={activeSession?.id === session.id
-                    ? "w-full rounded-2xl border border-orange-300 bg-orange-50/70 px-3 py-3 text-left"
-                    : "w-full rounded-2xl border border-steel-200 bg-white/75 px-3 py-3 text-left"}
-                  onClick={() => {
-                    setIsNewWorkflow(false);
-                    setActiveSessionId(session.id);
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium text-steel-900">{session.title}</div>
-                      <div className="mt-1 text-xs text-steel-600">{session.customerName || session.buyerEmail || "Unsaved workflow"}</div>
-                    </div>
-                    <span className={`status-chip ${statusTone[session.status] || "status-chip-steel"}`}>{session.status.replace(/_/g, " ")}</span>
-                  </div>
-                  <div className="mt-2 text-xs text-steel-500">{formatTime(session.updatedAt)}</div>
-                </button>
-              )) : <div className="text-sm text-steel-600">No quote workflows yet.</div>}
-            </div>
-          </div>
-
-          <div className="landing-card">
-            <div className="section-title">Exceptions</div>
-            <div className="mt-3 space-y-2">
-              {riskCards.length ? riskCards.map((card) => (
-                <div
-                  key={card.id}
-                  className={`rounded-2xl border px-3 py-3 ${
-                    card.severity === "critical" ? "border-rose-200 bg-rose-50/70" : "border-amber-200 bg-amber-50/70"
-                  }`}
-                >
-                  <div className="text-sm font-semibold text-steel-900">{card.title}</div>
-                  <div className="mt-2 space-y-1 text-xs leading-5 text-steel-700">
-                    {card.items.map((item) => (
-                      <div key={item}>{item}</div>
-                    ))}
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Exceptions</div>
+                  <div className="mt-1 text-sm text-steel-900">
+                    {riskCards.length ? riskCards.map((card) => card.title).join(", ") : "No open exceptions"}
                   </div>
                 </div>
-              )) : <div className="text-sm text-steel-600">No open exceptions.</div>}
+              </div>
+            </div>
+            <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
+              <div className="section-title">Quote workflows</div>
+              <div className="mt-3 space-y-2">
+                {visibleSessions.length ? visibleSessions.map((session) => (
+                  <button
+                    key={session.id}
+                    className={activeSession?.id === session.id
+                      ? "w-full rounded-2xl border border-orange-300 bg-orange-50/70 px-3 py-3 text-left"
+                      : "w-full rounded-2xl border border-steel-200 bg-white/75 px-3 py-3 text-left"}
+                    onClick={() => {
+                      setIsNewWorkflow(false);
+                      setActiveSessionId(session.id);
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-steel-900">{session.title}</div>
+                        <div className="mt-1 text-xs text-steel-600">{session.customerName || session.buyerEmail || "Unsaved workflow"}</div>
+                      </div>
+                      <span className={`status-chip ${statusTone[session.status] || "status-chip-steel"}`}>{session.status.replace(/_/g, " ")}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-steel-500">{formatTime(session.updatedAt)}</div>
+                  </button>
+                )) : <div className="text-sm text-steel-600">No quote workflows yet.</div>}
+              </div>
             </div>
           </div>
         </div>

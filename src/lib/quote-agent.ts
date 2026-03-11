@@ -104,7 +104,7 @@ const latestInboundCandidate = async (data: AppData, user: AppUser) => {
     if (decision.accept) return message;
   }
 
-  return inbound[0] || null;
+  return null;
 };
 
 const extractRequestedCompany = (command: string) => {
@@ -184,7 +184,8 @@ const resolveTargetMessage = async (data: AppData, user: AppUser, command: strin
     }
 
     const decision = await filterInboundEmail(message.subject, message.bodyText);
-    if (decision.accept) score += 1;
+    if (!decision.accept) return { message, score: -1 };
+    score += 3;
     return { message, score };
   }));
 
@@ -418,12 +419,12 @@ export const createQuoteAgentSession = async (
     session.status = "error";
     session.stage = "error";
     session.messages.push(newMessage("assistant", resolved.target
-      ? `I could not find a buyer email from ${resolved.target} in your inbox to quote from.`
-      : "I could not find any buyer email in your inbox to start quoting from."
+      ? `I could not find a qualifying industrial-product buyer email from ${resolved.target} in your inbox to quote from.`
+      : "I could not find any qualifying industrial-product buyer email in your inbox to start quoting from."
     ));
     session.activities.push(newActivity("agent", "error", resolved.target
-      ? `No buyer email from ${resolved.target} was available for quoting.`
-      : "No buyer email was available for quoting."
+      ? `No qualifying industrial-product buyer email from ${resolved.target} was available for quoting.`
+      : "No qualifying industrial-product buyer email was available for quoting."
     ));
     return session;
   }
@@ -451,8 +452,8 @@ export const applyConversationCommand = async (data: AppData, user: AppUser, ses
     const resolved = await resolveTargetMessage(data, user, command);
     if (resolved.target) {
       if (!resolved.message) {
-        next.messages.push(newMessage("assistant", `I could not find a buyer email from ${resolved.target} in your inbox.`));
-        next.activities.push(newActivity("agent", "error", `No buyer email from ${resolved.target} was available for quoting.`));
+        next.messages.push(newMessage("assistant", `I could not find a qualifying industrial-product buyer email from ${resolved.target} in your inbox.`));
+        next.activities.push(newActivity("agent", "error", `No qualifying industrial-product buyer email from ${resolved.target} was available for quoting.`));
         return next;
       }
       const retargeted = await hydrateQuoteSessionFromMessage(data, user, next, resolved.message);

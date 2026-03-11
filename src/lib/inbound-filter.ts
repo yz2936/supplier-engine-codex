@@ -8,17 +8,19 @@ export type InboundFilterDecision = {
 
 const normalize = (subject: string, bodyText: string) => `${subject}\n${bodyText}`.toLowerCase();
 
-const productSignalScore = (s: string) => {
-  const productTerms = /\b(stainless|carbon steel|alloy|pipe|tube|tubing|sheet|plate|coil|bar|angle|channel|fittings?|flange|valve|gasket|elbow|tee|reducer|cap|coupling|union|nipple|olet|round bar|flat bar|seamless|welded)\b/;
-  const specTerms = /\b(sch\s*\d+|schedule\s*\d+|\d+\s*(nb|nps|dn|mm|cm|m|in|inch|inches)\b|astm|asme|din|jis|api|mss|grade\s*[0-9a-z-]+|class\s*\d+|cl\s*\d+|ss\s*304|ss\s*316|qty|quantity|length|thickness|width|od|id|wall|rfq|quotation|quote)\b/;
-  const dimensionalPattern = /\b\d+(\.\d+)?\s*[x×]\s*\d+(\.\d+)?(\s*[x×]\s*\d+(\.\d+)?)?\b/;
-  const qtyPattern = /\b(qty|quantity|need|requirement)\b[\s:=-]*\d*/;
+const industrialProductTerms = /\b(stainless|carbon steel|alloy|pipe|tube|tubing|sheet|plate|coil|bar|angle|channel|fittings?|flange|valve|gasket|elbow|tee|reducer|cap|coupling|union|nipple|olet|round bar|flat bar|hex bar|square bar|sanitary|structural|ornamental|seamless|welded|schedule\s*\d+|sch\s*\d+)\b/;
+const industrialSpecTerms = /\b(astm|asme|din|jis|api|mss|a105|a106|a234|a312|wpb|tp304|tp316|316l|304l|class\s*\d+|cl\s*\d+|ss\s*304|ss\s*316|nb|nps|dn|od|id|wall|thickness|width|length|grade\s*[0-9a-z-]+)\b/;
+const industrialDimensionalPattern = /\b\d+(\.\d+)?\s*[x×]\s*\d+(\.\d+)?(\s*[x×]\s*\d+(\.\d+)?)?\b/;
+const industrialQtyPattern = /\b(qty|quantity|pcs|pieces|ea|each|ft|feet|meter|meters|mtr|lengths?)\b[\s:=-]*\d*/;
 
+const hasExplicitIndustrialProduct = (s: string) => industrialProductTerms.test(s);
+
+const productSignalScore = (s: string) => {
   let score = 0;
-  if (productTerms.test(s)) score += 2;
-  if (specTerms.test(s)) score += 2;
-  if (dimensionalPattern.test(s)) score += 1;
-  if (qtyPattern.test(s)) score += 1;
+  if (industrialProductTerms.test(s)) score += 3;
+  if (industrialSpecTerms.test(s)) score += 2;
+  if (industrialDimensionalPattern.test(s)) score += 1;
+  if (industrialQtyPattern.test(s)) score += 1;
   return score;
 };
 
@@ -32,7 +34,8 @@ const hasNegativeSalesSignal = (s: string) => {
   const advertisements = /\b(unsubscribe|newsletter|promotion|promotional|campaign|marketing|coupon|discount|sale ends|limited time|special offer|webinar|event invite|expo|booth|catalog|brochure|price list attached|new product launch)\b/;
   const inboundSales = /\b(we are (a|an)?\s*(manufacturer|supplier|stockist|exporter)|we can supply|we supply|we offer|introduce our company|glad to introduce|please find our company profile|looking for buyers|be your supplier|sell to you|stock available|ready stock|our products include)\b/;
   const accountNoise = /\b(security alert|2-step verification|password reset|account activity|verify your email|invoice overdue|subscription)\b/;
-  return advertisements.test(s) || inboundSales.test(s) || accountNoise.test(s);
+  const consumerNoise = /\b(apparel|fashion|banking|credit card|travel|shoe|beauty|skincare|retail|storewide|sitewide|coupon code|membership offer|ride|rideshare)\b/;
+  return advertisements.test(s) || inboundSales.test(s) || accountNoise.test(s) || consumerNoise.test(s);
 };
 
 const hasReplyContext = (s: string) => {
@@ -43,7 +46,7 @@ const hasReplyContext = (s: string) => {
 
 const hasProductSignal = (subject: string, bodyText: string) => {
   const s = normalize(subject, bodyText);
-  return productSignalScore(s) >= 3;
+  return hasExplicitIndustrialProduct(s) && productSignalScore(s) >= 4;
 };
 
 const heuristicFilter = (subject: string, bodyText: string): InboundFilterDecision => {
@@ -61,7 +64,7 @@ const heuristicFilter = (subject: string, bodyText: string): InboundFilterDecisi
     };
   }
 
-  if (productScore >= 3 && (buySideIntent || replyContext)) {
+  if (hasExplicitIndustrialProduct(s) && productScore >= 4 && (buySideIntent || replyContext)) {
     return {
       accept: true,
       reason: "Detected industrial sourcing request with buy-side procurement intent.",
