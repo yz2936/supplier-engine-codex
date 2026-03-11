@@ -4,6 +4,8 @@ import { requireUser } from "@/lib/server-auth";
 import { verifyInboundMailboxConnection } from "@/lib/inbound-sync";
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+const hasDb = () => Boolean(process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim() || process.env.POSTGRES_PRISMA_URL?.trim() || process.env.SUPABASE_DATABASE_URL?.trim());
+const missingPersistentDb = () => Boolean(process.env.VERCEL && !hasDb());
 
 type EmailAccountTestBody = {
   smtp?: { host?: string; port?: number; secure?: boolean; user?: string; pass?: string; from?: string };
@@ -24,6 +26,12 @@ const inferImapHostFromSmtp = (smtpHost: string) => {
 };
 
 export async function POST(req: Request) {
+  if (missingPersistentDb()) {
+    return NextResponse.json({
+      error: "Persistent storage is not configured. Set one of DATABASE_URL, POSTGRES_URL, POSTGRES_PRISMA_URL, or SUPABASE_DATABASE_URL in Vercel environment variables."
+    }, { status: 503 });
+  }
+
   const auth = await requireUser(req);
   if (!auth.ok) return auth.response;
 
