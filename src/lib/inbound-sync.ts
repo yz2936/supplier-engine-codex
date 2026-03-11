@@ -79,6 +79,22 @@ const createClient = (
   });
 };
 
+const connectImapMailbox = async (
+  cfg: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: { user: string; pass: string };
+    rejectUnauthorized: boolean;
+  },
+  rejectUnauthorized: boolean
+) => {
+  const client = createClient(cfg, rejectUnauthorized);
+  await client.connect();
+  await client.mailboxOpen("INBOX");
+  return client;
+};
+
 class Pop3Client {
   private socket: net.Socket | tls.TLSSocket | null = null;
   private buffer = "";
@@ -445,6 +461,54 @@ export const syncInboundMailboxForManager = async (
     if (isCertChainError(message)) {
       throw new Error(
         `Inbound ${inboundProtocol.toUpperCase()} mailbox TLS validation failed. Allow self-signed certificates only if your mail provider uses a custom certificate chain.`
+      );
+    }
+    throw err;
+  }
+};
+
+export const verifyInboundMailboxConnection = async (params: {
+  protocol: "imap" | "pop";
+  config: {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: { user: string; pass: string };
+    rejectUnauthorized: boolean;
+  };
+}) => {
+  const { protocol, config } = params;
+
+  const runProbe = async (rejectUnauthorized: boolean) => {
+    if (protocol === "pop") {
+      const client = new Pop3Client(config, rejectUnauthorized);
+      try {
+        await client.connect();
+        await client.login();
+        return "POP mailbox connected.";
+      } finally {
+        await client.quit().catch(() => undefined);
+      }
+    }
+
+    const client = await connectImapMailbox(config, rejectUnauthorized);
+    try {
+      return "IMAP mailbox connected.";
+    } finally {
+      await client.logout().catch(() => undefined);
+    }
+  };
+
+  try {
+    return await runProbe(config.rejectUnauthorized);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (config.rejectUnauthorized && isCertChainError(message)) {
+      return runProbe(false);
+    }
+    if (isCertChainError(message)) {
+      throw new Error(
+        `Inbound ${protocol.toUpperCase()} mailbox TLS validation failed. Allow self-signed certificates only if your mail provider uses a custom certificate chain.`
       );
     }
     throw err;

@@ -32,8 +32,10 @@ type EmailSettingsResponse = {
 export function EmailIntegrationSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [status, setStatus] = useState("");
+  const [testStatus, setTestStatus] = useState("");
   const [syncStatus, setSyncStatus] = useState("");
   const [smtpHost, setSmtpHost] = useState("smtp.gmail.com");
   const [smtpPort, setSmtpPort] = useState(587);
@@ -56,6 +58,39 @@ export function EmailIntegrationSettings() {
   const [popPass, setPopPass] = useState("");
   const [popRejectUnauthorized, setPopRejectUnauthorized] = useState(true);
   const [configuredAt, setConfiguredAt] = useState<string>("");
+
+  const buildPayload = () => ({
+    smtp: {
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      user: smtpUser,
+      pass: smtpPass,
+      from: smtpFrom
+    },
+    inboundProtocol,
+    useSmtpForImap,
+    imap: useSmtpForImap
+      ? undefined
+      : {
+        host: imapHost,
+        port: imapPort,
+        secure: imapSecure,
+        user: imapUser,
+        pass: imapPass,
+        rejectUnauthorized: imapRejectUnauthorized
+      },
+    pop: inboundProtocol === "pop"
+      ? {
+        host: popHost,
+        port: popPort,
+        secure: popSecure,
+        user: popUser,
+        pass: popPass,
+        rejectUnauthorized: popRejectUnauthorized
+      }
+      : undefined
+  });
 
   useEffect(() => {
     (async () => {
@@ -118,6 +153,26 @@ export function EmailIntegrationSettings() {
     }
   };
 
+  const runConnectionTest = async () => {
+    setTesting(true);
+    setTestStatus("Testing SMTP and inbound mailbox...");
+    try {
+      const res = await fetch("/api/email/account/test", {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...buildPayload(), target: "both" })
+      });
+      const json = await res.json().catch(() => ({} as { error?: string; smtp?: string; inbound?: string }));
+      if (!res.ok) throw new Error(json.error || "Email connection test failed");
+      setTestStatus([json.smtp, json.inbound].filter(Boolean).join(" "));
+    } catch (err) {
+      setTestStatus(err instanceof Error ? err.message : "Email connection test failed");
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <div className="panel panel-aurora space-y-3 text-sm">
       <div className="flex items-center justify-between">
@@ -136,6 +191,10 @@ export function EmailIntegrationSettings() {
         <div className="text-xs text-steel-600">Loading settings...</div>
       ) : (
         <>
+          <div className="rounded-2xl border border-steel-200/70 bg-white/60 p-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-steel-500">Outgoing Mail</div>
+            <div className="mt-1 text-xs text-steel-600">Use SMTP for quote delivery. Common setups are `465 + SSL/TLS` or `587/25` without implicit SSL.</div>
+          </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             <input className="input" placeholder="SMTP host" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} />
             <input className="input" type="number" placeholder="SMTP port" value={smtpPort} onChange={(e) => setSmtpPort(Number(e.target.value || 587))} />
@@ -148,6 +207,10 @@ export function EmailIntegrationSettings() {
             <input className="input md:col-span-2" placeholder="From address (optional)" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
           </div>
 
+          <div className="rounded-2xl border border-steel-200/70 bg-white/60 p-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-steel-500">Incoming Mail</div>
+            <div className="mt-1 text-xs text-steel-600">Use IMAP for folder-based inbox access or POP when the provider only exposes download-style access. Common secure ports are `993` for IMAP and `995` for POP.</div>
+          </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2">
               <span className="text-steel-700">Inbound protocol</span>
@@ -211,38 +274,7 @@ export function EmailIntegrationSettings() {
                     credentials: "include",
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      smtp: {
-                        host: smtpHost,
-                        port: smtpPort,
-                        secure: smtpSecure,
-                        user: smtpUser,
-                        pass: smtpPass,
-                        from: smtpFrom
-                      },
-                      inboundProtocol,
-                      useSmtpForImap,
-                      imap: useSmtpForImap
-                        ? undefined
-                        : {
-                          host: imapHost,
-                          port: imapPort,
-                          secure: imapSecure,
-                          user: imapUser,
-                          pass: imapPass,
-                          rejectUnauthorized: imapRejectUnauthorized
-                        },
-                      pop: inboundProtocol === "pop"
-                        ? {
-                          host: popHost,
-                          port: popPort,
-                          secure: popSecure,
-                          user: popUser,
-                          pass: popPass,
-                          rejectUnauthorized: popRejectUnauthorized
-                        }
-                        : undefined
-                    })
+                    body: JSON.stringify(buildPayload())
                   });
                   const json = await res.json().catch(() => ({} as { error?: string; settings?: EmailSettingsResponse }));
                   if (!res.ok) throw new Error(json.error || "Failed to save email settings");
@@ -262,7 +294,14 @@ export function EmailIntegrationSettings() {
             </button>
             <button
               className="btn-secondary"
-              disabled={saving || syncing}
+              disabled={saving || syncing || testing}
+              onClick={() => void runConnectionTest()}
+            >
+              {testing ? "Testing..." : "Test Mailbox Connection"}
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={saving || syncing || testing}
               onClick={() => void runInboundSync()}
             >
               {syncing ? "Syncing..." : "Test Inbound Sync"}
@@ -272,6 +311,7 @@ export function EmailIntegrationSettings() {
       )}
 
       {status && <div className="text-xs text-steel-700">{status}</div>}
+      {testStatus && <div className="text-xs text-steel-700">{testStatus}</div>}
       {syncStatus && <div className="text-xs text-steel-700">{syncStatus}</div>}
     </div>
   );
