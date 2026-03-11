@@ -27,6 +27,11 @@ type EmailSettingsResponse = {
     user: string;
     rejectUnauthorized?: boolean;
   } | null;
+  forwarding?: {
+    address?: string;
+    webhookPath?: string;
+    secretRequired?: boolean;
+  } | null;
 };
 
 export function EmailIntegrationSettings() {
@@ -34,6 +39,7 @@ export function EmailIntegrationSettings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [status, setStatus] = useState("");
   const [testStatus, setTestStatus] = useState("");
   const [syncStatus, setSyncStatus] = useState("");
@@ -58,6 +64,9 @@ export function EmailIntegrationSettings() {
   const [popPass, setPopPass] = useState("");
   const [popRejectUnauthorized, setPopRejectUnauthorized] = useState(true);
   const [configuredAt, setConfiguredAt] = useState<string>("");
+  const [forwardingAddress, setForwardingAddress] = useState("");
+  const [forwardingWebhookPath, setForwardingWebhookPath] = useState("/api/email/inbound");
+  const [forwardingSecretRequired, setForwardingSecretRequired] = useState(false);
 
   const buildPayload = () => ({
     smtp: {
@@ -125,6 +134,9 @@ export function EmailIntegrationSettings() {
           setPopRejectUnauthorized(settings.pop.rejectUnauthorized ?? true);
         }
         if (settings.updatedAt) setConfiguredAt(settings.updatedAt);
+        setForwardingAddress(settings.forwarding?.address || "");
+        setForwardingWebhookPath(settings.forwarding?.webhookPath || "/api/email/inbound");
+        setForwardingSecretRequired(Boolean(settings.forwarding?.secretRequired));
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Failed to load email settings");
       } finally {
@@ -211,6 +223,23 @@ export function EmailIntegrationSettings() {
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-steel-500">Incoming Mail</div>
             <div className="mt-1 text-xs text-steel-600">Use IMAP for folder-based inbox access or POP when the provider only exposes download-style access. Common secure ports are `993` for IMAP and `995` for POP.</div>
           </div>
+
+          <div className="rounded-2xl border border-steel-200/70 bg-white/70 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-steel-500">Forwarding Proxy</div>
+            <div className="mt-2 text-sm text-steel-700">
+              If direct mailbox sync is unreliable, forward buyer quote emails to the proxy address below. The inbound route will extract the original buyer `From`, `Subject`, and quote text from forwarded-message headers and route it into your tool.
+            </div>
+            <div className="mt-3 rounded-xl border border-steel-200 bg-white px-3 py-3 text-sm text-steel-900">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Proxy address</div>
+              <div className="mt-1 break-all font-medium">{forwardingAddress || "INBOUND_ROUTE_ADDRESS is not configured yet."}</div>
+            </div>
+            <div className="mt-3 text-xs text-steel-600">
+              Forwarding steps: create a rule in your other mailbox to forward RFQ or quote-request emails to the proxy address. The tool intake endpoint is `{forwardingWebhookPath}`.{forwardingSecretRequired ? " A webhook secret is enabled on the server." : ""}
+            </div>
+            <div className="mt-3 text-xs text-steel-600">
+              Recommended setup: if your personal mailbox integration is unstable, clear your custom email settings and let the tool poll the platform proxy inbox instead.
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             <label className="flex items-center gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2">
               <span className="text-steel-700">Inbound protocol</span>
@@ -294,17 +323,43 @@ export function EmailIntegrationSettings() {
             </button>
             <button
               className="btn-secondary"
-              disabled={saving || syncing || testing}
+              disabled={saving || syncing || testing || resetting}
               onClick={() => void runConnectionTest()}
             >
               {testing ? "Testing..." : "Test Mailbox Connection"}
             </button>
             <button
               className="btn-secondary"
-              disabled={saving || syncing || testing}
+              disabled={saving || syncing || testing || resetting}
               onClick={() => void runInboundSync()}
             >
               {syncing ? "Syncing..." : "Test Inbound Sync"}
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={saving || syncing || testing || resetting}
+              onClick={async () => {
+                setResetting(true);
+                setStatus("Clearing custom mailbox settings...");
+                try {
+                  const res = await fetch("/api/email/account", {
+                    credentials: "include",
+                    method: "DELETE"
+                  });
+                  const json = await res.json().catch(() => ({} as { error?: string; message?: string }));
+                  if (!res.ok) throw new Error(json.error || "Failed to clear custom email settings");
+                  setStatus(json.message || "Custom email settings cleared.");
+                  setSmtpPass("");
+                  setImapPass("");
+                  setPopPass("");
+                } catch (err) {
+                  setStatus(err instanceof Error ? err.message : "Failed to clear custom email settings");
+                } finally {
+                  setResetting(false);
+                }
+              }}
+            >
+              {resetting ? "Resetting..." : "Use Platform Proxy Inbox"}
             </button>
           </div>
         </>

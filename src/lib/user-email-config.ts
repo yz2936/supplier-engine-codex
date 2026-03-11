@@ -255,3 +255,7 @@ export const saveUserEmailSettings = (
 
   user.emailSettings = { ...nextSettings, inboundProtocol: user.emailSettings?.inboundProtocol || "imap" };
 };
+
+export const clearUserEmailSettings = (user: AppUser) => {
+  delete user.emailSettings;
+};

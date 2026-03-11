@@ -362,6 +362,19 @@ const buildCards = (params: {
   return cards;
 };
 
+const buildManualSourceMessage = (user: AppUser, seed: { buyerName?: string; buyerEmail?: string; rfqText?: string }): BuyerMessage => ({
+  id: crypto.randomUUID(),
+  buyerId: "manual-import",
+  managerUserId: user.id,
+  direction: "inbound",
+  sourceMessageId: `manual-${crypto.randomUUID()}`,
+  subject: `Forwarded buyer request from ${seed.buyerName?.trim() || seed.buyerEmail?.trim() || "buyer"}`,
+  bodyText: seed.rfqText?.trim() || "",
+  fromEmail: seed.buyerEmail?.trim() || "unknown-buyer@example.com",
+  toEmail: user.email,
+  receivedAt: nowIso()
+});
+
 const updateDraftCard = (session: QuoteAgentSession): QuoteUiCard[] => {
   return session.cards.map((card) => {
     if (card.type === "quote_preview" && session.quoteDraft) {
@@ -394,12 +407,18 @@ export const createQuoteAgentSession = async (
   command: string,
   seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string }
 ) => {
-  const resolved = seed?.sourceMessageId
+  const manualSeed = seed?.rfqText?.trim() && seed?.buyerEmail?.trim()
+    ? {
+      target: seed.buyerName || seed.buyerEmail || "",
+      message: buildManualSourceMessage(user, seed)
+    }
+    : null;
+  const resolved = manualSeed || (seed?.sourceMessageId
     ? {
       target: seed.buyerName || seed.buyerEmail || "",
       message: data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
     }
-    : await resolveTargetMessage(data, user, command);
+    : await resolveTargetMessage(data, user, command));
   const sourceMessage = resolved.message;
   const session: QuoteAgentSession = {
     id: crypto.randomUUID(),

@@ -57,6 +57,36 @@ const pickText = (body: Record<string, unknown>) => {
   return html ? stripHtml(html) : "";
 };
 
+const extractForwardedField = (label: string, text: string) => {
+  const patterns = [
+    new RegExp(`^${label}:\\s*(.+)$`, "im"),
+    new RegExp(`^-+\\s*${label}:\\s*(.+)$`, "im")
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return "";
+};
+
+const extractForwardedMessage = (subject: string, text: string) => {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const forwardedMarker = /-{2,}\s*forwarded message\s*-{2,}|begin forwarded message|from:\s.+\n(?:date|sent):/i;
+  if (!/^fw:|^fwd:/i.test(subject) && !forwardedMarker.test(normalized)) return null;
+
+  const forwardedFrom = extractForwardedField("From", normalized);
+  const forwardedSubject = extractForwardedField("Subject", normalized);
+  const bodyStart = normalized.search(/^(?:hello|hi|dear|\s*$|\d+\s*(?:pcs|ea|ft|m)\b|qty\b|quotation\b|rfq\b)/im);
+  const forwardedBody = bodyStart >= 0 ? normalized.slice(bodyStart).trim() : normalized.trim();
+
+  return {
+    from: forwardedFrom,
+    subject: forwardedSubject || subject.replace(/^fwd?:\s*/i, "").trim(),
+    bodyText: forwardedBody
+  };
+};
+
 export async function POST(req: Request) {
   try {
     const secret = process.env.INBOUND_EMAIL_SECRET?.trim();
@@ -73,10 +103,14 @@ export async function POST(req: Request) {
     const from = normalizeEmailField(body.from ?? body.sender ?? body.fromEmail ?? body.from_email ?? envelopeRaw.from);
     const toRaw = normalizeEmailField(body.to ?? body.recipient ?? body.toEmail ?? body.to_email ?? envelopeRaw.to);
     const to = toRaw || defaultInboundAddress;
-    const subject = String(body.subject ?? body["headers.subject"] ?? "").trim() || "Buyer Reply";
-    const text = pickText(body);
+    const rawSubject = String(body.subject ?? body["headers.subject"] ?? "").trim() || "Buyer Reply";
+    const rawText = pickText(body);
+    const forwarded = extractForwardedMessage(rawSubject, rawText);
+    const effectiveFrom = forwarded?.from ? normalizeEmailField(forwarded.from) : from;
+    const subject = forwarded?.subject || rawSubject;
+    const text = forwarded?.bodyText || rawText;
 
-    if (!from || !to || !text) {
+    if (!effectiveFrom || !to || !text) {
       return NextResponse.json({ error: "from, to, and text are required" }, { status: 400 });
     }
 
@@ -94,7 +128,7 @@ export async function POST(req: Request) {
       const manager = findManagerForInbound(data, to, subject);
       if (!manager) return null;
 
-      const buyer = upsertBuyerProfile(data, manager.id, from);
+      const buyer = upsertBuyerProfile(data, manager.id, effectiveFrom);
       data.buyerMessages.push({
         id: crypto.randomUUID(),
         buyerId: buyer.id,
@@ -102,7 +136,7 @@ export async function POST(req: Request) {
         direction: "inbound",
         subject,
         bodyText: text,
-        fromEmail: extractEmailAddress(from),
+        fromEmail: extractEmailAddress(effectiveFrom),
         toEmail: extractEmailAddress(to),
         receivedAt: new Date().toISOString()
       });

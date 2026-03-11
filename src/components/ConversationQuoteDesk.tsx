@@ -37,6 +37,7 @@ export function ConversationQuoteDesk() {
   const [manualSubject, setManualSubject] = useState("");
   const [manualBody, setManualBody] = useState("");
   const [manualImportInfo, setManualImportInfo] = useState("");
+  const [showManualIntake, setShowManualIntake] = useState(false);
   const [approvalModal, setApprovalModal] = useState<QuoteApprovalRequest | null>(null);
   const [pendingMargin, setPendingMargin] = useState(12);
 
@@ -181,31 +182,18 @@ export function ConversationQuoteDesk() {
 
     setBusy(true);
     setError("");
-    setManualImportInfo("Importing forwarded email...");
+    setManualImportInfo("Opening quote workflow from forwarded email...");
     try {
-      const importRes = await fetch("/api/email/inbound/manual", {
-        credentials: "include",
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          buyerName: manualBuyerName,
-          buyerEmail,
-          subject: manualSubject,
-          bodyText
-        })
-      });
-      const importJson = await importRes.json();
-      if (!importRes.ok) throw new Error(importJson.error || "Failed to import forwarded email");
-
       const quoteRes = await fetch("/api/agent/quote", {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          command: "Quote this forwarded buyer email.",
-          sourceMessageId: importJson.messageId,
-          buyerName: importJson.buyerName,
-          buyerEmail: importJson.buyerEmail,
+          command: manualSubject.trim()
+            ? `Quote this forwarded buyer email. Subject: ${manualSubject.trim()}`
+            : "Quote this forwarded buyer email.",
+          buyerName: manualBuyerName.trim() || undefined,
+          buyerEmail,
           rfqText: bodyText
         })
       });
@@ -213,11 +201,28 @@ export function ConversationQuoteDesk() {
       if (!quoteRes.ok) throw new Error(quoteJson.error || "Quote agent failed");
 
       upsertSession(quoteJson.session);
-      setManualImportInfo(`Imported forwarded email from ${importJson.buyerEmail} and opened the quote workflow.`);
+      try {
+        await fetch("/api/email/inbound/manual", {
+          credentials: "include",
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            buyerName: manualBuyerName,
+            buyerEmail,
+            subject: manualSubject,
+            bodyText
+          })
+        });
+      } catch {
+        // Best-effort inbox logging should not block quote creation.
+      }
+
+      setManualImportInfo(`Opened the quote workflow from ${buyerEmail}.`);
       setManualBuyerName("");
       setManualBuyerEmail("");
       setManualSubject("");
       setManualBody("");
+      setShowManualIntake(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import forwarded email");
       setManualImportInfo("");
@@ -325,6 +330,9 @@ export function ConversationQuoteDesk() {
               <button className="btn-secondary" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.")}>
                 {busy ? "Parsing..." : "Parse Email"}
               </button>
+              <button className="btn-secondary" disabled={busy} onClick={() => setShowManualIntake((value) => !value)}>
+                {showManualIntake ? "Hide Manual Intake" : "Paste Forwarded Email"}
+              </button>
               <button className="btn-secondary" disabled={!activeSession || busy} onClick={() => void runSessionAction("save")}>Save Draft</button>
               <button className="btn" disabled={!approvalPending || busy} onClick={() => setApprovalModal(activeSession?.approval || null)}>
                 {approvalPending ? "Approve & Send" : "Awaiting Approval"}
@@ -396,51 +404,54 @@ export function ConversationQuoteDesk() {
             </div>
           </div>
 
+          {showManualIntake && (
+            <div className="rounded-[24px] border border-steel-200 bg-white/85 p-5">
+              <div className="section-title">Manual Intake</div>
+              <div className="mt-1 text-lg font-semibold text-steel-950">Paste a forwarded buyer email</div>
+              <div className="mt-2 text-sm text-steel-600">
+                Use this when mailbox sync is unreliable. The quote agent will parse directly from the pasted email body, and the tool will log it to the buyer inbox on a best-effort basis.
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <input
+                  className="input"
+                  placeholder="Buyer company or contact (optional)"
+                  value={manualBuyerName}
+                  onChange={(e) => setManualBuyerName(e.target.value)}
+                />
+                <input
+                  className="input"
+                  placeholder="Buyer email"
+                  value={manualBuyerEmail}
+                  onChange={(e) => setManualBuyerEmail(e.target.value)}
+                />
+                <input
+                  className="input md:col-span-2"
+                  placeholder="Forwarded email subject (optional)"
+                  value={manualSubject}
+                  onChange={(e) => setManualSubject(e.target.value)}
+                />
+                <textarea
+                  className="input min-h-[220px] md:col-span-2"
+                  placeholder="Paste the forwarded buyer email body here..."
+                  value={manualBody}
+                  onChange={(e) => setManualBody(e.target.value)}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button className="btn" disabled={busy} onClick={() => void importForwardedEmail()}>
+                  {busy ? "Opening..." : "Open Quote From Forwarded Email"}
+                </button>
+              </div>
+              {manualImportInfo && <div className="mt-3 text-xs text-steel-700">{manualImportInfo}</div>}
+            </div>
+          )}
+
           <div className="min-h-0 flex-1 overflow-auto rounded-[26px] border border-steel-200 bg-[#f7fafc] p-4">
             {!activeSession && (
               <div className="mx-auto max-w-3xl space-y-3">
                 <div className="rounded-[24px] border border-dashed border-steel-300 bg-white px-5 py-10 text-center">
                   <div className="text-sm font-medium text-steel-900">Start a quote workflow</div>
                   <div className="mt-2 text-sm text-steel-600">Use “Parse Email” to pull the latest buyer request and populate the review workspace.</div>
-                </div>
-                <div className="rounded-[24px] border border-steel-200 bg-white p-5">
-                  <div className="section-title">Fallback Intake</div>
-                  <div className="mt-1 text-lg font-semibold text-steel-950">Paste a forwarded buyer email</div>
-                  <div className="mt-2 text-sm text-steel-600">
-                    If direct mailbox sync is unreliable, forward the buyer email to yourself, paste the content here, and the tool will route it into the buyer inbox and parse it immediately.
-                  </div>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <input
-                      className="input"
-                      placeholder="Buyer company or contact (optional)"
-                      value={manualBuyerName}
-                      onChange={(e) => setManualBuyerName(e.target.value)}
-                    />
-                    <input
-                      className="input"
-                      placeholder="Buyer email"
-                      value={manualBuyerEmail}
-                      onChange={(e) => setManualBuyerEmail(e.target.value)}
-                    />
-                    <input
-                      className="input md:col-span-2"
-                      placeholder="Email subject"
-                      value={manualSubject}
-                      onChange={(e) => setManualSubject(e.target.value)}
-                    />
-                    <textarea
-                      className="input min-h-[220px] md:col-span-2"
-                      placeholder="Paste the forwarded buyer email body here..."
-                      value={manualBody}
-                      onChange={(e) => setManualBody(e.target.value)}
-                    />
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button className="btn" disabled={busy} onClick={() => void importForwardedEmail()}>
-                      {busy ? "Importing..." : "Import & Parse Forwarded Email"}
-                    </button>
-                  </div>
-                  {manualImportInfo && <div className="mt-3 text-xs text-steel-700">{manualImportInfo}</div>}
                 </div>
               </div>
             )}

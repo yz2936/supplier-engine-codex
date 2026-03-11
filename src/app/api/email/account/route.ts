@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { mutateData, readData } from "@/lib/data-store";
 import { requireUser } from "@/lib/server-auth";
-import { saveUserEmailSettings, sanitizeUserEmailSettingsForApi } from "@/lib/user-email-config";
+import { clearUserEmailSettings, saveUserEmailSettings, sanitizeUserEmailSettingsForApi } from "@/lib/user-email-config";
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 const hasDb = () => Boolean(process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim() || process.env.POSTGRES_PRISMA_URL?.trim() || process.env.SUPABASE_DATABASE_URL?.trim());
@@ -30,7 +30,12 @@ export async function GET(req: Request) {
     const user = data.users.find((u) => u.id === auth.user.id || u.email === auth.user.email);
     return NextResponse.json({
       ok: true,
-      settings: sanitizeUserEmailSettingsForApi(user?.emailSettings)
+      settings: sanitizeUserEmailSettingsForApi(user?.emailSettings),
+      forwarding: {
+        address: process.env.INBOUND_ROUTE_ADDRESS?.trim() || "",
+        webhookPath: "/api/email/inbound",
+        secretRequired: Boolean(process.env.INBOUND_EMAIL_SECRET?.trim())
+      }
     });
   } catch (err) {
     const serviceError = toServiceError("Failed to load email settings", err);
@@ -177,6 +182,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, settings: sanitizeUserEmailSettingsForApi(result.settings) });
   } catch (err) {
     const serviceError = toServiceError("Failed to save email settings", err);
+    return NextResponse.json({ error: serviceError.error }, { status: serviceError.status });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    if (missingPersistentDb()) {
+      return NextResponse.json({
+        error: "Persistent storage is not configured. Set one of DATABASE_URL, POSTGRES_URL, POSTGRES_PRISMA_URL, or SUPABASE_DATABASE_URL in Vercel environment variables."
+      }, { status: 503 });
+    }
+
+    const auth = await requireUser(req);
+    if (!auth.ok) return auth.response;
+
+    const result = await mutateData((data) => {
+      const user = data.users.find((u) => u.id === auth.user.id || u.email === auth.user.email);
+      if (!user) return { ok: false as const, status: 404 as const, error: "User not found" };
+      clearUserEmailSettings(user);
+      return { ok: true as const };
+    });
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      message: "Custom email settings cleared. The tool will now use the platform proxy inbox if configured."
+    });
+  } catch (err) {
+    const serviceError = toServiceError("Failed to clear email settings", err);
     return NextResponse.json({ error: serviceError.error }, { status: serviceError.status });
   }
 }
