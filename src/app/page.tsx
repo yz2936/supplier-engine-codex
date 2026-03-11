@@ -313,6 +313,67 @@ export default function HomePage() {
     }
   }, []);
 
+  const resetWorkspaceState = useCallback(() => {
+    parseAbortRef.current?.abort();
+    parseRequestIdRef.current = 0;
+    agentRunIdRef.current += 1;
+    lastAgentSignatureRef.current = "";
+
+    setActiveView("dashboard");
+    setCustomerName("");
+    setRfqText(defaultRFQ);
+    setMarginPercent(12);
+    setAutoParse(true);
+    setRfqSourceFiles([]);
+    setRfqFileBusy(false);
+    setRfqFileStatus("");
+    setLines([]);
+    setTotal(0);
+    setBusy(false);
+    setError("");
+    setSourcingSeed(null);
+    setSourcingQuoteSeed(null);
+    setBuyerEmail("");
+    setBuyerName("");
+    setDraftSubject("Quotation");
+    setDraftIntro("Thank you for the opportunity. Please find our quotation below.");
+    setDraftEta("Earliest available");
+    setDraftValidDays(7);
+    setDraftIncoterm("FOB Origin");
+    setDraftPaymentTerms("Net 30");
+    setDraftFreightTerms("Packed for sea freight");
+    setDraftNotes("");
+    setShowDraftPreview(false);
+    setSendStatus("");
+    setMobileNavOpen(false);
+    setChatOpen(false);
+    setAgentStage("idle");
+    setAgentActivities([]);
+  }, []);
+
+  const logout = useCallback(async () => {
+    setAuthError("");
+    setAuthBusy(true);
+    try {
+      const res = await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
+      const json = await res.json().catch(() => ({} as AuthResponse));
+      if (!res.ok) {
+        setAuthError(json.error || "Logout failed");
+        return false;
+      }
+      resetWorkspaceState();
+      setUser(null);
+      setAuthMode("login");
+      setLoginPassword("");
+      return true;
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Logout failed");
+      return false;
+    } finally {
+      setAuthBusy(false);
+    }
+  }, [resetWorkspaceState]);
+
   const loadInventoryCount = useCallback(async () => {
     const res = await fetch("/api/inventory", { credentials: "include", cache: "no-store" });
     if (!res.ok) return;
@@ -938,15 +999,13 @@ export default function HomePage() {
 
           <button
             className="w-full border border-white/40 bg-white/10 px-3 py-2 text-sm font-medium text-white lg:mt-auto"
-            onClick={async () => {
-              await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
-              setUser(null);
-              setLines([]);
-              setTotal(0);
+            disabled={authBusy}
+            onClick={() => {
+              void logout();
             }}
             title={sidebarCollapsed ? "Logout" : undefined}
           >
-            {sidebarCollapsed ? "⎋" : "Logout"}
+            {sidebarCollapsed ? "⎋" : authBusy ? "Logging out..." : "Logout"}
           </button>
         </aside>
 
