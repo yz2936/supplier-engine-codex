@@ -1,26 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { money, stockColor, stockLabel, summarizeRequestedSpecs } from "@/lib/format";
-import {
-  QuoteAgentSession,
-  QuoteApprovalRequest,
-  QuoteUiCard
-} from "@/lib/types";
-
-const starterPrompts = [
-  "Quote the latest email from the buyer.",
-  "Don't include the out-of-stock items.",
-  "Change the lead time to 8 weeks.",
-  "Draft a more concise email."
-];
+import { QuoteAgentSession, QuoteApprovalRequest } from "@/lib/types";
 
 const stageLabels = [
   { key: "email_selected", label: "Email" },
   { key: "rfq_parsed", label: "Parse" },
-  { key: "inventory_checked", label: "Inventory" },
+  { key: "inventory_checked", label: "Compare" },
   { key: "draft_ready", label: "Draft" },
-  { key: "awaiting_approval", label: "Approval" },
+  { key: "awaiting_approval", label: "Approve" },
   { key: "sent", label: "Sent" }
 ] as const;
 
@@ -45,7 +34,6 @@ export function ConversationQuoteDesk() {
   const [error, setError] = useState("");
   const [approvalModal, setApprovalModal] = useState<QuoteApprovalRequest | null>(null);
   const [pendingMargin, setPendingMargin] = useState(12);
-  const endRef = useRef<HTMLDivElement | null>(null);
 
   const activeSession = useMemo(() => {
     if (isNewWorkflow) return null;
@@ -78,40 +66,51 @@ export function ConversationQuoteDesk() {
     [activeSession]
   );
 
-  const approvalCard = useMemo(
-    () => activeSession?.cards.find((card) => card.type === "approval") || null,
+  const latestAssistantMessage = useMemo(
+    () => [...(activeSession?.messages || [])].reverse().find((message) => message.role === "assistant") || null,
     [activeSession]
+  );
+
+  const inventoryMatches = useMemo(
+    () => inventoryCard?.type === "inventory_match" ? inventoryCard.matches : [],
+    [inventoryCard]
   );
 
   const workspaceRows = useMemo(() => {
     const extracted = extractionCard?.type === "rfq_extraction" ? extractionCard.lineItems : [];
-    const matches = inventoryCard?.type === "inventory_match" ? inventoryCard.matches : [];
     const quoteLines = quoteCard?.type === "quote_preview" ? quoteCard.lines : [];
-    const count = Math.max(extracted.length, matches.length, quoteLines.length);
+    const count = Math.max(extracted.length, inventoryMatches.length, quoteLines.length);
     return Array.from({ length: count }, (_, index) => {
       const extractedLine = extracted[index];
-      const match = matches[index];
+      const match = inventoryMatches[index];
       const quoteLine = quoteLines[index];
       return {
         id: `${index}-${extractedLine?.rawSpec || quoteLine?.description || match?.inventoryItem?.sku || "line"}`,
         requestedLabel: extractedLine
           ? [extractedLine.grade, extractedLine.category].filter(Boolean).join(" ")
           : quoteLine?.description || "Unparsed item",
-        requestedSpecs: extractedLine ? summarizeRequestedSpecs(extractedLine).join(" | ") || extractedLine.rawSpec : "Awaiting parse",
-        quantity: extractedLine ? `${extractedLine.quantity} ${extractedLine.quantityUnit}` : quoteLine ? `${quoteLine.quantity} ${quoteLine.unit}` : "-",
-        stockStatus: match?.stockStatus || quoteLine?.stockStatus,
-        matchedSku: match?.inventoryItem?.sku || quoteLine?.sku || "No match yet",
+        requestedSpecs: extractedLine
+          ? summarizeRequestedSpecs(extractedLine).join(" | ") || extractedLine.rawSpec
+          : "Awaiting parse",
+        quantity: extractedLine
+          ? `${extractedLine.quantity} ${extractedLine.quantityUnit}`
+          : quoteLine
+            ? `${quoteLine.quantity} ${quoteLine.unit}`
+            : "-",
         score: typeof match?.score === "number" ? `${Math.round(match.score * 100)}%` : "Pending",
         unitPrice: typeof quoteLine?.unitPrice === "number" ? money(quoteLine.unitPrice) : "Pending",
-        extendedPrice: typeof quoteLine?.extendedPrice === "number" ? money(quoteLine.extendedPrice) : "Pending"
+        extendedPrice: typeof quoteLine?.extendedPrice === "number" ? money(quoteLine.extendedPrice) : "Pending",
+        match
       };
     });
-  }, [extractionCard, inventoryCard, quoteCard]);
+  }, [extractionCard, inventoryMatches, quoteCard]);
 
-  const latestAssistantMessage = useMemo(
-    () => [...(activeSession?.messages || [])].reverse().find((message) => message.role === "assistant") || null,
-    [activeSession]
-  );
+  const capabilitySummary = useMemo(() => {
+    const green = inventoryMatches.filter((match) => match.stockStatus === "green").length;
+    const yellow = inventoryMatches.filter((match) => match.stockStatus === "yellow").length;
+    const red = inventoryMatches.filter((match) => match.stockStatus === "red").length;
+    return { green, yellow, red };
+  }, [inventoryMatches]);
 
   useEffect(() => {
     setPendingMargin(activeSession?.marginPercent ?? 12);
@@ -125,8 +124,7 @@ export function ConversationQuoteDesk() {
     });
     setIsNewWorkflow(false);
     setActiveSessionId(next.id);
-    if (next.approval?.status === "pending") setApprovalModal(next.approval);
-    else setApprovalModal(null);
+    setApprovalModal(next.approval?.status === "pending" ? next.approval : null);
   };
 
   const loadSessions = async () => {
@@ -143,10 +141,6 @@ export function ConversationQuoteDesk() {
   useEffect(() => {
     void loadSessions().catch((err) => setError(err instanceof Error ? err.message : "Failed to load quote sessions"));
   }, []);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeSession?.messages, activeSession?.cards]);
 
   const sendCommand = async (command: string) => {
     const text = command.trim();
@@ -237,193 +231,21 @@ export function ConversationQuoteDesk() {
     }
   };
 
-  const renderCard = (card: QuoteUiCard) => {
-    if (card.type === "email_preview") {
-      return (
-        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]" open>
-          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-            <div>
-              <div className="section-title">Step 1 · Buyer Email</div>
-              <div className="mt-1 text-base font-semibold text-steel-950">{card.email.subject || "(No subject)"}</div>
-              <div className="mt-1 text-xs text-steel-600">{card.email.fromEmail} · {formatTime(card.email.receivedAt)}</div>
-            </div>
-            <span className="rounded-full border border-steel-200 bg-steel-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-600">
-              Expand
-            </span>
-          </summary>
-          <div className="mt-3 max-h-40 overflow-auto rounded-2xl border border-steel-200 bg-steel-50/80 p-3 text-sm leading-6 text-steel-700 whitespace-pre-wrap">
-            {card.email.bodyText}
-          </div>
-        </details>
-      );
-    }
-
-    if (card.type === "rfq_extraction") {
-      return (
-        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]" open>
-          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-            <div>
-              <div className="section-title">Step 2 · Parsed RFQ</div>
-              <div className="mt-1 text-sm text-steel-600">{card.summary}</div>
-            </div>
-            <div className="rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-teal-700">
-              {card.lineItems.length} lines
-            </div>
-          </summary>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
-            <table className="data-grid border-0">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Specs</th>
-                  <th>Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.lineItems.map((item, index) => (
-                  <tr key={`${item.rawSpec}-${index}`}>
-                    <td className="py-3 pr-3 text-sm font-medium text-steel-900">{[item.grade, item.category].filter(Boolean).join(" ")}</td>
-                    <td className="py-3 pr-3 text-xs text-steel-600">{summarizeRequestedSpecs(item).join(" | ") || item.rawSpec}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{item.quantity} {item.quantityUnit}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      );
-    }
-
-    if (card.type === "inventory_match") {
-      return (
-        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
-          <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
-            <div>
-              <div className="section-title">Step 3 · Inventory Check</div>
-              <div className="mt-1 text-sm text-steel-600">Each requested line is matched against current inventory before pricing is proposed.</div>
-            </div>
-            <span className="rounded-full border border-steel-200 bg-steel-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-600">
-              Review
-            </span>
-          </summary>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
-            <table className="data-grid border-0">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Requested</th>
-                  <th>Matched SKU</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.matches.map((match, index) => (
-                  <tr key={`${match.requested.rawSpec}-${index}`}>
-                    <td className="py-3 pr-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 rounded-full ${stockColor(match.stockStatus)}`} />
-                        <span className="text-xs text-steel-700">{stockLabel(match.stockStatus)}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{[match.requested.grade, match.requested.category].filter(Boolean).join(" ")}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-700">{match.inventoryItem?.sku || "No match"}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-700">{match.score.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      );
-    }
-
-    if (card.type === "quote_preview") {
-      return (
-        <details key={card.id} className="rounded-[22px] border border-steel-200 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]" open>
-          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="section-title">Step 4 · Quote Draft</div>
-              <div className="mt-1 text-base font-semibold text-steel-950">{card.customerName}</div>
-              <div className="text-sm text-steel-600">{card.buyerEmail}</div>
-            </div>
-            <div className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-orange-700">
-              Total {money(card.total)}
-            </div>
-          </summary>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-steel-200">
-            <table className="data-grid border-0">
-              <thead>
-                <tr>
-                  <th>Line</th>
-                  <th>Qty</th>
-                  <th>Unit</th>
-                  <th>Unit Price</th>
-                  <th>Extended</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.lines.map((line, index) => (
-                  <tr key={`${line.description}-${index}`}>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{line.description}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{line.quantity}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{line.unit}</td>
-                    <td className="py-3 pr-3 text-sm text-steel-800">{money(line.unitPrice)}</td>
-                    <td className="py-3 pr-3 text-sm font-medium text-orange-700">{money(line.extendedPrice)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <details className="mt-3 rounded-2xl border border-steel-200 bg-steel-50/80 p-3">
-            <summary className="cursor-pointer list-none text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">
-              Outbound Draft Email
-            </summary>
-            <div className="mt-1 text-sm font-medium text-steel-900">{card.draftSubject}</div>
-            <div className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap text-xs leading-5 text-steel-700">{card.draftBody}</div>
-          </details>
-        </details>
-      );
-    }
-
-    if (card.type === "risk_alert") {
-      return (
-        <div key={card.id} className={`rounded-[22px] border p-4 ${card.severity === "critical" ? "border-rose-200 bg-rose-50/70" : "border-amber-200 bg-amber-50/70"}`}>
-          <div className="section-title">Exceptions</div>
-          <div className="mt-1 text-base font-semibold text-steel-950">{card.title}</div>
-          <div className="mt-3 space-y-2">
-            {card.items.map((item) => (
-              <div key={item} className="rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-sm text-steel-700">{item}</div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    if (card.type === "approval") {
-      return (
-        <div key={card.id} className="rounded-[22px] border border-orange-200 bg-orange-50/70 p-4">
-          <div className="section-title">Approval required</div>
-          <div className="mt-1 text-base font-semibold text-steel-950">{card.approval.title}</div>
-          <div className="mt-1 text-sm text-steel-700">{card.approval.detail}</div>
-        </div>
-      );
-    }
-
-    return null;
-  };
-
   const visibleSessions = sessions.filter((session) => session.status !== "discarded");
+  const approvalPending = activeSession?.approval?.status === "pending";
+  const draftReady = activeSession?.stage === "draft_ready" || activeSession?.stage === "awaiting_approval" || activeSession?.stage === "sent";
+  const parseReady = Boolean(extractionCard?.type === "rfq_extraction");
 
   return (
     <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_300px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="panel-industrial flex min-h-[760px] flex-col gap-4 overflow-hidden">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="section-title">Quote Desk</div>
-              <h3 className="font-['Sora'] text-3xl font-semibold tracking-[-0.04em] text-steel-950">Conversation-led quoting</h3>
+              <h3 className="font-['Sora'] text-3xl font-semibold tracking-[-0.04em] text-steel-950">Parse, review, approve</h3>
               <p className="mt-2 max-w-2xl text-sm text-steel-600">
-                Ask for the next quoting action in chat. The agent pulls the buyer email, parses the RFQ, checks stock, prepares pricing, and stops for approval before any send.
+                Pull the latest buyer email, extract specs, compare with inventory and capability, then approve and send to suppliers.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -439,12 +261,18 @@ export function ConversationQuoteDesk() {
               >
                 New Workflow
               </button>
+              <button className="btn-secondary" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.")}>
+                {busy ? "Parsing..." : "Parse Email"}
+              </button>
               <button className="btn-secondary" disabled={!activeSession || busy} onClick={() => void runSessionAction("save")}>Save Draft</button>
+              <button className="btn" disabled={!approvalPending || busy} onClick={() => setApprovalModal(activeSession?.approval || null)}>
+                {approvalPending ? "Approve & Send" : "Awaiting Approval"}
+              </button>
               <button className="btn-ghost" disabled={!activeSession || busy} onClick={() => void discardWorkflow()}>Discard</button>
             </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="rounded-[24px] border border-steel-200 bg-white/72 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -453,14 +281,10 @@ export function ConversationQuoteDesk() {
                   <div className="mt-1 text-sm text-steel-600">
                     {activeSession
                       ? `${activeSession.buyerEmail || "Buyer not linked"} · last updated ${formatTime(activeSession.updatedAt)}`
-                      : "Start a new workflow from chat or use one of the suggested prompts."}
+                      : "Load the latest buyer email to start a review."}
                   </div>
                 </div>
-                {activeSession && (
-                  <span className={`status-chip ${statusTone[activeSession.status] || "status-chip-steel"}`}>
-                    {activeSession.status.replace(/_/g, " ")}
-                  </span>
-                )}
+                {activeSession && <span className={`status-chip ${statusTone[activeSession.status] || "status-chip-steel"}`}>{activeSession.status.replace(/_/g, " ")}</span>}
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {stageLabels.map((stage) => {
@@ -487,45 +311,28 @@ export function ConversationQuoteDesk() {
             </div>
 
             <div className="rounded-[24px] border border-steel-200 bg-white/72 p-4">
-              <div className="section-title">Commercial controls</div>
-              <div className="mt-2 flex items-center justify-between text-sm font-medium text-steel-800">
-                <span>Profit margin</span>
-                <span>{pendingMargin}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={40}
-                value={pendingMargin}
-                className="mt-3 w-full"
-                disabled={!activeSession || busy}
-                onChange={(e) => setPendingMargin(Number(e.target.value))}
-              />
-              <button className="btn mt-3 w-full" disabled={!activeSession || busy} onClick={() => void runSessionAction("update_margin", { marginPercent: pendingMargin })}>
-                Apply Margin
-              </button>
-              <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-2xl border border-steel-200 bg-steel-50/80 px-3 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Saved</div>
-                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.savedAt ? "Yes" : "No"}</div>
-                </div>
-                <div className="rounded-2xl border border-steel-200 bg-steel-50/80 px-3 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Approval</div>
-                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.approval?.status || "n/a"}</div>
-                </div>
-              </div>
-              <div className="mt-3 text-xs leading-5 text-steel-600">
-                Margin updates recalculate the proposed pricing before approval. Sending remains gated until you approve explicitly.
+              <div className="section-title">Controls</div>
+              <div className="mt-3 space-y-3">
+                <button className="btn w-full" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.")}>
+                  {busy ? "Working..." : "Parse latest buyer email"}
+                </button>
+                <button className="btn-secondary w-full" disabled={!activeSession || busy} onClick={() => void sendCommand("Don't include the out-of-stock items.")}>
+                  Remove out-of-stock lines
+                </button>
+                <button className="btn-secondary w-full" disabled={!activeSession || busy} onClick={() => void runSessionAction("update_margin", { marginPercent: pendingMargin })}>
+                  Apply {pendingMargin}% margin
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={40}
+                  value={pendingMargin}
+                  className="w-full"
+                  disabled={!activeSession || busy}
+                  onChange={(e) => setPendingMargin(Number(e.target.value))}
+                />
               </div>
             </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-            {starterPrompts.map((prompt) => (
-              <button key={prompt} className="btn-secondary text-left" onClick={() => void sendCommand(prompt)}>
-                {prompt}
-              </button>
-            ))}
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto rounded-[26px] border border-steel-200 bg-[#f7fafc] p-4">
@@ -533,14 +340,14 @@ export function ConversationQuoteDesk() {
               <div className="mx-auto max-w-3xl space-y-3">
                 <div className="rounded-[24px] border border-dashed border-steel-300 bg-white px-5 py-10 text-center">
                   <div className="text-sm font-medium text-steel-900">Start a quote workflow</div>
-                  <div className="mt-2 text-sm text-steel-600">Type a request like “Quote the latest email from the buyer.” The agent will show each completed step here in the thread.</div>
+                  <div className="mt-2 text-sm text-steel-600">Use “Parse Email” to pull the latest buyer request and populate the review workspace.</div>
                 </div>
               </div>
             )}
 
             {activeSession && (
               <div className="mx-auto max-w-[1400px] space-y-4">
-                <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)_300px]">
+                <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
                   <section className="rounded-[24px] border border-steel-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.04)]">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -570,7 +377,7 @@ export function ConversationQuoteDesk() {
                         <div className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-steel-700">
                           {emailCard?.type === "email_preview"
                             ? emailCard.email.bodyText
-                            : activeSession.rfqText || "Type a command to pull in the latest buyer request."}
+                            : activeSession.rfqText || "Parse the latest buyer email to load the request."}
                         </div>
                       </div>
                     </div>
@@ -584,7 +391,7 @@ export function ConversationQuoteDesk() {
                           {workspaceRows.length ? `${workspaceRows.length} items in workspace` : "No line items yet"}
                         </div>
                         <div className="mt-1 text-sm text-steel-600">
-                          Review requested specs, stock coverage, and pricing in one place before sending.
+                          Review specs, compare inventory and capability, then approve the supplier send.
                         </div>
                       </div>
                       {quoteCard?.type === "quote_preview" && (
@@ -595,168 +402,173 @@ export function ConversationQuoteDesk() {
                       )}
                     </div>
 
-                    <div className="mt-4 overflow-hidden rounded-[22px] border border-steel-200">
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-left text-sm">
-                          <thead className="bg-steel-50/80 text-steel-600">
-                            <tr>
-                              <th className="px-4 py-3 font-semibold">Requested item</th>
-                              <th className="px-4 py-3 font-semibold">Qty</th>
-                              <th className="px-4 py-3 font-semibold">Stock</th>
-                              <th className="px-4 py-3 font-semibold">Matched SKU</th>
-                              <th className="px-4 py-3 font-semibold">Unit price</th>
-                              <th className="px-4 py-3 font-semibold">Extended</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {workspaceRows.length ? workspaceRows.map((row) => (
-                              <tr key={row.id} className="border-t border-steel-200/80 bg-white align-top">
-                                <td className="px-4 py-3">
-                                  <div className="font-medium text-steel-900">{row.requestedLabel}</div>
-                                  <div className="mt-1 text-xs leading-5 text-steel-500">{row.requestedSpecs}</div>
-                                </td>
-                                <td className="px-4 py-3 text-steel-800">{row.quantity}</td>
-                                <td className="px-4 py-3">
-                                  {row.stockStatus ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className={`h-2.5 w-2.5 rounded-full ${stockColor(row.stockStatus)}`} />
-                                      <span className="text-steel-800">{stockLabel(row.stockStatus)}</span>
-                                      <span className="text-xs text-steel-500">{row.score}</span>
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">In stock</div>
+                        <div className="mt-2 text-2xl font-semibold text-steel-950">{capabilitySummary.green}</div>
+                      </div>
+                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Partial / review</div>
+                        <div className="mt-2 text-2xl font-semibold text-steel-950">{capabilitySummary.yellow}</div>
+                      </div>
+                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Out of stock</div>
+                        <div className="mt-2 text-2xl font-semibold text-steel-950">{capabilitySummary.red}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-4">
+                      {workspaceRows.length ? workspaceRows.map((row) => (
+                        <div key={row.id} className="rounded-[22px] border border-steel-200 bg-white">
+                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-steel-200 bg-[#f3f7ff] px-4 py-4">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="mt-1 h-5 w-5 rounded-md border border-blue-200 bg-white" />
+                              <div className="min-w-0">
+                                <div className="text-lg font-semibold text-steel-950">{row.requestedLabel}</div>
+                                <div className="mt-1 text-sm text-steel-600">{row.quantity}</div>
+                                <div className="mt-1 text-xs leading-5 text-steel-500">{row.requestedSpecs}</div>
+                              </div>
+                            </div>
+                            <button className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                              Supplier review
+                            </button>
+                          </div>
+
+                          <div className="px-4 py-4">
+                            <div className="mb-3 text-sm font-medium text-steel-600">
+                              Inventory & capability {row.match?.alternatives?.length ? `(${row.match.alternatives.length + (row.match.inventoryItem ? 1 : 0)} options)` : ""}
+                            </div>
+                            <div className="space-y-3">
+                              {row.match?.inventoryItem ? (
+                                <div className="rounded-2xl border border-steel-200 bg-white px-4 py-4">
+                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_110px_90px_110px_110px] lg:items-start">
+                                    <div>
+                                      <div className="font-medium text-steel-900">{row.match.inventoryItem.specText || row.match.inventoryItem.sku}</div>
+                                      <div className="mt-1 text-sm text-steel-500">SKU: {row.match.inventoryItem.sku}</div>
                                     </div>
-                                  ) : (
-                                    <span className="text-steel-500">Pending</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-steel-800">{row.matchedSku}</td>
-                                <td className="px-4 py-3 text-steel-800">{row.unitPrice}</td>
-                                <td className="px-4 py-3 font-medium text-steel-900">{row.extendedPrice}</td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan={6} className="px-4 py-10 text-center text-sm text-steel-500">
-                                  The workspace will fill after the agent parses an RFQ.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">Avail</div>
+                                      <div className="mt-1 flex items-center gap-2 text-base font-semibold text-steel-900">
+                                        <span className={`h-2.5 w-2.5 rounded-full ${stockColor(row.match.stockStatus)}`} />
+                                        {stockLabel(row.match.stockStatus)}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">Score</div>
+                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.score}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">Unit Price</div>
+                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.unitPrice}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">Total</div>
+                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.extendedPrice}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="rounded-2xl border border-dashed border-steel-300 bg-steel-50/70 px-4 py-4 text-sm text-steel-600">
+                                  No direct inventory match yet. Review capability or route this line to sourcing.
+                                </div>
+                              )}
 
-                    {(quoteCard?.type === "quote_preview" || latestAssistantMessage) && (
-                      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-                        <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Latest agent note</div>
-                          <div className="mt-2 text-sm leading-6 text-steel-800">
-                            {latestAssistantMessage?.content || "The agent will summarize its latest action here."}
-                          </div>
-                        </div>
-                        <div className="rounded-[22px] border border-steel-200 bg-white p-4">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Draft email</div>
-                          <div className="mt-2 text-sm font-medium text-steel-900">
-                            {quoteCard?.type === "quote_preview" ? quoteCard.draftSubject : "No draft yet"}
-                          </div>
-                          <div className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-5 text-steel-600">
-                            {quoteCard?.type === "quote_preview"
-                              ? quoteCard.draftBody
-                              : "Once pricing is ready, the outbound draft will appear here."}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  <aside className="space-y-4">
-                    <div className="rounded-[24px] border border-steel-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.04)]">
-                      <div className="section-title">Approval</div>
-                      <div className="mt-2 text-lg font-semibold text-steel-950">
-                        {approvalCard?.type === "approval" ? approvalCard.approval.title : "No approval open"}
-                      </div>
-                      <div className="mt-2 text-sm text-steel-600">
-                        {approvalCard?.type === "approval"
-                          ? approvalCard.approval.detail
-                          : activeSession.approval?.status === "pending"
-                            ? activeSession.approval.detail
-                            : "The workflow will stop here before any outbound send."}
-                      </div>
-                      {activeSession.approval?.status === "pending" && (
-                        <button className="btn mt-4 w-full" disabled={busy} onClick={() => setApprovalModal(activeSession.approval || null)}>
-                          Review approval
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="rounded-[24px] border border-steel-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.04)]">
-                      <div className="section-title">Exceptions</div>
-                      <div className="mt-3 space-y-2">
-                        {riskCards.length ? riskCards.map((card) => (
-                          <div
-                            key={card.id}
-                            className={`rounded-2xl border px-3 py-3 ${
-                              card.severity === "critical" ? "border-rose-200 bg-rose-50/70" : "border-amber-200 bg-amber-50/70"
-                            }`}
-                          >
-                            <div className="text-sm font-semibold text-steel-900">{card.title}</div>
-                            <div className="mt-2 space-y-1 text-xs leading-5 text-steel-700">
-                              {card.items.map((item) => (
-                                <div key={item}>{item}</div>
+                              {row.match?.alternatives?.slice(0, 2).map((alternative) => (
+                                <div key={alternative.sku} className="rounded-2xl border border-steel-200 bg-steel-50/50 px-4 py-4">
+                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_110px_110px] lg:items-start">
+                                    <div>
+                                      <div className="font-medium text-steel-900">{alternative.specText || alternative.sku}</div>
+                                      <div className="mt-1 text-sm text-steel-500">SKU: {alternative.sku}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">On Hand</div>
+                                      <div className="mt-1 text-base font-semibold text-steel-900">{alternative.qtyOnHand}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">Base Price</div>
+                                      <div className="mt-1 text-base font-semibold text-steel-900">{money(alternative.basePrice)}</div>
+                                    </div>
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           </div>
-                        )) : (
-                          <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3 text-sm text-steel-600">
-                            No open exceptions.
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-[22px] border border-dashed border-steel-300 bg-white px-4 py-10 text-center text-sm text-steel-500">
+                          The workspace will fill after the agent parses a buyer RFQ.
+                        </div>
+                      )}
                     </div>
 
-                    <div className="rounded-[24px] border border-steel-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.04)]">
-                      <div className="section-title">Recent activity</div>
-                      <div className="mt-3 space-y-2">
-                        {activeSession.activities.length ? activeSession.activities.slice(0, 5).map((activity) => (
-                          <div key={activity.id} className="rounded-2xl border border-steel-200/80 bg-steel-50/60 px-3 py-2">
-                            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-steel-500">
-                              {activity.actor} · {activity.kind}
-                            </div>
-                            <div className="mt-1 text-sm text-steel-800">{activity.detail}</div>
-                          </div>
-                        )) : (
-                          <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3 text-sm text-steel-600">
-                            No activity yet.
-                          </div>
-                        )}
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Latest note</div>
+                        <div className="mt-2 text-sm leading-6 text-steel-800">
+                          {latestAssistantMessage?.content || "The agent will summarize the latest parsing and comparison result here."}
+                        </div>
+                      </div>
+                      <div className="rounded-[22px] border border-steel-200 bg-white p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Supplier draft</div>
+                        <div className="mt-2 text-sm font-medium text-steel-900">
+                          {quoteCard?.type === "quote_preview" ? quoteCard.draftSubject : "No supplier draft yet"}
+                        </div>
+                        <div className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-5 text-steel-600">
+                          {quoteCard?.type === "quote_preview"
+                            ? quoteCard.draftBody
+                            : "When the draft is ready, the outbound supplier message will appear here."}
+                        </div>
                       </div>
                     </div>
-                  </aside>
+                  </section>
                 </div>
-
-                <div className="hidden">
-                  {activeSession.cards.map(renderCard)}
-                </div>
-                <div ref={endRef} />
               </div>
             )}
           </div>
 
-          <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
-            <div className="flex flex-col gap-3">
-              <textarea
-                className="input min-h-24"
-                placeholder="Ask to quote the latest email, change a quantity, apply a lead time, revise tone, or approve the send."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-              />
-              <div className="flex flex-wrap gap-2">
-                <button className="btn" disabled={busy} onClick={() => void sendCommand(input)}>{busy ? "Working..." : "Send Command"}</button>
-                {activeSession?.approval?.status === "pending" && (
-                  <button className="btn-secondary" disabled={busy} onClick={() => setApprovalModal(activeSession.approval || null)}>
-                    Review Approval
-                  </button>
-                )}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
+              <div className="section-title">Operator command</div>
+              <div className="mt-2 flex flex-col gap-3">
+                <textarea
+                  className="input min-h-24"
+                  placeholder="Optional: revise tone, change lead time, exclude lines, or leave an instruction for the agent."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button className="btn" disabled={busy || !input.trim()} onClick={() => void sendCommand(input)}>{busy ? "Working..." : "Apply instruction"}</button>
+                  {approvalPending && (
+                    <button className="btn-secondary" disabled={busy} onClick={() => setApprovalModal(activeSession?.approval || null)}>
+                      Review approval
+                    </button>
+                  )}
+                </div>
+              </div>
+              {error && <div className="mt-3 text-sm text-rose-600">{error}</div>}
+            </div>
+
+            <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
+              <div className="section-title">Review status</div>
+              <div className="mt-3 space-y-3">
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Parsed</div>
+                  <div className="mt-1 font-semibold text-steel-900">{parseReady ? "Yes" : "No"}</div>
+                </div>
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Draft ready</div>
+                  <div className="mt-1 font-semibold text-steel-900">{draftReady ? "Yes" : "No"}</div>
+                </div>
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Approval</div>
+                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.approval?.status || "n/a"}</div>
+                </div>
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Saved</div>
+                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.savedAt ? "Yes" : "No"}</div>
+                </div>
               </div>
             </div>
-            {error && <div className="mt-3 text-sm text-rose-600">{error}</div>}
           </div>
         </div>
 
@@ -789,14 +601,23 @@ export function ConversationQuoteDesk() {
           </div>
 
           <div className="landing-card">
-            <div className="section-title">Activity timeline</div>
+            <div className="section-title">Exceptions</div>
             <div className="mt-3 space-y-2">
-              {activeSession?.activities.length ? activeSession.activities.map((activity) => (
-                <div key={activity.id} className="rounded-2xl border border-steel-200/70 bg-white/75 px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-steel-500">{activity.actor} · {activity.kind}</div>
-                  <div className="mt-1 text-sm text-steel-800">{activity.detail}</div>
+              {riskCards.length ? riskCards.map((card) => (
+                <div
+                  key={card.id}
+                  className={`rounded-2xl border px-3 py-3 ${
+                    card.severity === "critical" ? "border-rose-200 bg-rose-50/70" : "border-amber-200 bg-amber-50/70"
+                  }`}
+                >
+                  <div className="text-sm font-semibold text-steel-900">{card.title}</div>
+                  <div className="mt-2 space-y-1 text-xs leading-5 text-steel-700">
+                    {card.items.map((item) => (
+                      <div key={item}>{item}</div>
+                    ))}
+                  </div>
                 </div>
-              )) : <div className="text-sm text-steel-600">No activity yet.</div>}
+              )) : <div className="text-sm text-steel-600">No open exceptions.</div>}
             </div>
           </div>
         </div>
@@ -809,7 +630,7 @@ export function ConversationQuoteDesk() {
             <div className="mt-2 text-2xl font-semibold text-steel-950">{approvalModal.title}</div>
             <div className="mt-2 text-sm text-steel-600">{approvalModal.detail}</div>
             <div className="mt-4 rounded-2xl border border-steel-200 bg-steel-50/80 p-4 text-sm text-steel-700">
-              No outbound quote email will be sent until you approve this action.
+              No outbound supplier email will be sent until you approve this action.
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
               <button className="btn" disabled={busy} onClick={() => void approveSend()}>{busy ? "Sending..." : "Approve And Send"}</button>

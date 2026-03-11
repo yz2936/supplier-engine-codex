@@ -7,6 +7,14 @@ const MONTH_COUNT = 6;
 
 const monthKey = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 
+type SupplierInsight = {
+  id: string;
+  area: "inventory" | "operations" | "sales";
+  tone: "neutral" | "warn" | "good";
+  title: string;
+  detail: string;
+};
+
 const buildMonthWindow = () => {
   const now = new Date();
   const months: Array<{ key: string; label: string }> = [];
@@ -19,6 +27,11 @@ const buildMonthWindow = () => {
   }
   return months;
 };
+
+const topEntries = (counts: Map<string, number>, limit = 2) =>
+  [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit);
 
 export async function GET(req: Request) {
   const auth = await requireUser(req);
@@ -115,6 +128,105 @@ export async function GET(req: Request) {
     };
   });
 
+  const scopedInboundMessages = inboundMessages.slice();
+  const topDemandCounts = new Map<string, number>();
+  for (const quote of scopedQuotes) {
+    for (const item of quote.itemsQuoted || []) {
+      const raw = item.requested?.category || item.requested?.productType || item.description || "Unclassified";
+      const key = String(raw).trim();
+      if (!key) continue;
+      topDemandCounts.set(key, (topDemandCounts.get(key) || 0) + Number(item.quantity || 0));
+    }
+  }
+
+  const complaintSignals = {
+    delivery: 0,
+    quality: 0,
+    pricing: 0
+  };
+  for (const message of scopedInboundMessages) {
+    const text = `${message.subject} ${message.bodyText}`.toLowerCase();
+    if (/\b(late|delay|lead time|eta|expedite|urgent|asap|delivery)\b/.test(text)) complaintSignals.delivery += 1;
+    if (/\b(damaged|damage|wrong|incorrect|packing|quality|defect|issue)\b/.test(text)) complaintSignals.quality += 1;
+    if (/\b(price|pricing|cost|quote revision|revise)\b/.test(text)) complaintSignals.pricing += 1;
+  }
+
+  const openSourcingItems = sourcing.filter((r) => r.status === "Open").flatMap((r) => r.items || []);
+  const sourcingPressureCounts = new Map<string, number>();
+  for (const item of openSourcingItems) {
+    const key = String(item.productType || item.grade || "Unclassified").trim();
+    sourcingPressureCounts.set(key, (sourcingPressureCounts.get(key) || 0) + Number(item.quantity || 0));
+  }
+
+  const supplierInsights: SupplierInsight[] = [];
+  const topDemand = topEntries(topDemandCounts);
+  if (topDemand.length) {
+    supplierInsights.push({
+      id: "demand-mix",
+      area: "sales",
+      tone: "good",
+      title: "Demand is concentrating in a few product families",
+      detail: `${topDemand.map(([name, qty]) => `${name} (${qty})`).join(", ")} are driving the most quoted volume. Prioritize quote speed and availability on these lines.`
+    });
+  }
+
+  const strongestComplaint = Object.entries(complaintSignals).sort((a, b) => b[1] - a[1])[0];
+  if (strongestComplaint && strongestComplaint[1] > 0) {
+    const label = strongestComplaint[0] === "delivery"
+      ? "delivery timing"
+      : strongestComplaint[0] === "quality"
+        ? "packing or quality"
+        : "pricing revisions";
+    supplierInsights.push({
+      id: "buyer-friction",
+      area: "operations",
+      tone: "warn",
+      title: "Recent buyer friction is clustering around service follow-up",
+      detail: `${strongestComplaint[1]} recent buyer messages referenced ${label}. Tighten response quality, lead-time accuracy, and pre-send checks to reduce repeat back-and-forth.`
+    });
+  }
+
+  if (outOfStock > 0 || lowStock > 0) {
+    supplierInsights.push({
+      id: "inventory-risk",
+      area: "inventory",
+      tone: outOfStock > 0 ? "warn" : "neutral",
+      title: "Inventory risk can block conversion if demand keeps rising",
+      detail: `${outOfStock} SKUs are out of stock and ${lowStock} are low stock. Buyers are more likely to feel friction on availability unless at-risk items are replenished before the next quote wave.`
+    });
+  }
+
+  const topSourcingPressure = topEntries(sourcingPressureCounts, 1)[0];
+  if (topSourcingPressure) {
+    supplierInsights.push({
+      id: "sourcing-pressure",
+      area: "inventory",
+      tone: "warn",
+      title: "Open sourcing requests show where supplier coverage is thin",
+      detail: `${topSourcingPressure[0]} is generating the most open sourcing demand right now. Add capacity, stock, or backup supplier coverage here first.`
+    });
+  }
+
+  if (manufacturersAtRisk > 0 || avgLeadTime > 21) {
+    supplierInsights.push({
+      id: "supplier-network",
+      area: "operations",
+      tone: "warn",
+      title: "Supplier lead times need attention",
+      detail: `${manufacturersAtRisk} suppliers are operating above the target lead-time band, and the current network averages ${Number(avgLeadTime.toFixed(1))} days. Improve supplier responsiveness or rebalance volume to faster partners.`
+    });
+  }
+
+  if (!supplierInsights.length) {
+    supplierInsights.push({
+      id: "stable-board",
+      area: "sales",
+      tone: "good",
+      title: "The board is stable",
+      detail: "No major demand spikes or complaint patterns are standing out. Use this window to sharpen pricing, inventory accuracy, and supplier follow-up discipline."
+    });
+  }
+
   return NextResponse.json({
     kpis: {
       inboundLast7d: inboundLast7d.length,
@@ -129,6 +241,7 @@ export async function GET(req: Request) {
       avgLeadTimeDays: Number(avgLeadTime.toFixed(1))
     },
     recentInbound,
+    supplierInsights: supplierInsights.slice(0, 5),
     trends: {
       rfqQuote: rfqQuoteTrend,
       inventory: inventoryTrend

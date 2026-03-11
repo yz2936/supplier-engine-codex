@@ -22,6 +22,13 @@ type DashboardPayload = {
     subject: string;
     receivedAt: string;
   }>;
+  supplierInsights: Array<{
+    id: string;
+    area: "inventory" | "operations" | "sales";
+    tone: "neutral" | "warn" | "good";
+    title: string;
+    detail: string;
+  }>;
   trends: {
     rfqQuote: Array<{ month: string; rfqs: number; quotes: number }>;
     inventory: Array<{ month: string; demandQty: number; restockQty: number; netDelta: number; cumulativeDelta: number }>;
@@ -42,6 +49,7 @@ const emptyData: DashboardPayload = {
     avgLeadTimeDays: 0
   },
   recentInbound: [],
+  supplierInsights: [],
   trends: {
     rfqQuote: [],
     inventory: []
@@ -276,6 +284,12 @@ export function DashboardOverview({
     return "Pipeline is stable. Use this window to clean pricing and inventory data.";
   }, [data.kpis.inboundLast7d, data.kpis.inventoryOutOfStock, data.kpis.openSourcing]);
 
+  const insightToneClass = (tone: "neutral" | "warn" | "good") => {
+    if (tone === "warn") return "border-amber-200 bg-amber-50/70";
+    if (tone === "good") return "border-emerald-200 bg-emerald-50/70";
+    return "border-steel-200 bg-white/85";
+  };
+
   return (
     <div className="space-y-4">
       <div className="panel panel-aurora flex flex-wrap items-center justify-between gap-3">
@@ -378,23 +392,29 @@ export function DashboardOverview({
       <div className="panel space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <div className="section-title">Recent inbound</div>
-            <div className="font-semibold text-steel-900">Latest buyer activity</div>
+            <div className="section-title">Supplier insights</div>
+            <div className="font-semibold text-steel-900">Latest buyer and operating signals</div>
           </div>
           <button className="btn-secondary" onClick={() => onNavigateView?.("buyers")}>Open Buyers</button>
         </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {data.recentInbound.map((m) => (
-            <div key={m.id} className="rounded-xl border border-steel-200 bg-white/85 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-semibold text-steel-900">{m.buyerName}</div>
-                <div className="text-xs text-steel-600">{new Date(m.receivedAt).toLocaleString()}</div>
+        <div className="space-y-3">
+          {data.supplierInsights.map((insight) => (
+            <div key={insight.id} className={`rounded-2xl border p-4 ${insightToneClass(insight.tone)}`}>
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="mt-1 h-2.5 w-2.5 rounded-full bg-steel-900" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-semibold text-steel-900">{insight.title}</div>
+                    <div className="rounded-full border border-current/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-600">
+                      {insight.area}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-sm leading-6 text-steel-700">{insight.detail}</div>
+                </div>
               </div>
-              <div className="text-xs text-steel-600">{m.fromEmail}</div>
-              <div className="mt-1 text-sm text-steel-800">{m.subject || "(No subject)"}</div>
             </div>
           ))}
-          {!data.recentInbound.length && <div className="text-sm text-steel-600">No inbound messages yet.</div>}
+          {!data.supplierInsights.length && <div className="text-sm text-steel-600">No supplier insights yet.</div>}
         </div>
       </div>
 
