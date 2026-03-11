@@ -27,6 +27,11 @@ type AppUser = {
   createdAt: string;
 };
 
+type AuthResponse = {
+  user?: AppUser | null;
+  error?: string;
+};
+
 type View = "dashboard" | "quote_desk" | "inventory" | "sourcing" | "buyers" | "quotes" | "settings";
 type AgentStage = "idle" | "validating" | "parsing" | "awaiting_approval" | "ready";
 type AgentActivity = {
@@ -41,6 +46,7 @@ export default function HomePage() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [loadingUser, setLoadingUser] = useState(true);
+  const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
 
   const [loginEmail, setLoginEmail] = useState("");
@@ -283,12 +289,27 @@ export default function HomePage() {
 
   const loadCurrentUser = useCallback(async () => {
     const res = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
-    const json = await res.json();
-    setUser(json.user ?? null);
-    if (json.user) {
-      setOnboardingName(json.user.name);
-      setOnboardingCompany(json.user.companyName || "");
-      setOnboardingRole(json.user.role);
+    const json = await res.json().catch(() => ({ user: null } as AuthResponse));
+    if (!res.ok) {
+      setUser(null);
+      return null;
+    }
+    const nextUser = json.user ?? null;
+    setUser(nextUser);
+    if (nextUser) {
+      setOnboardingName(nextUser.name);
+      setOnboardingCompany(nextUser.companyName || "");
+      setOnboardingRole(nextUser.role);
+    }
+    return nextUser;
+  }, []);
+
+  const applyAuthenticatedUser = useCallback((nextUser: AppUser | null | undefined) => {
+    setUser(nextUser ?? null);
+    if (nextUser) {
+      setOnboardingName(nextUser.name);
+      setOnboardingCompany(nextUser.companyName || "");
+      setOnboardingRole(nextUser.role);
     }
   }, []);
 
@@ -717,20 +738,31 @@ export default function HomePage() {
                 <input className="input" placeholder="Password" type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
                 <button
                   className="btn w-full"
+                  disabled={authBusy}
                   onClick={async () => {
                     setAuthError("");
-                    const res = await fetch("/api/auth/login", {
-                      credentials: "include",
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email: loginEmail, password: loginPassword })
-                    });
-                    const json = await res.json();
-                    if (!res.ok) return setAuthError(json.error || "Login failed");
-                    await loadCurrentUser();
+                    setAuthBusy(true);
+                    try {
+                      const res = await fetch("/api/auth/login", {
+                        credentials: "include",
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: loginEmail, password: loginPassword })
+                      });
+                      const json = await res.json().catch(() => ({} as AuthResponse));
+                      if (!res.ok) {
+                        setAuthError(json.error || "Login failed");
+                        return;
+                      }
+                      applyAuthenticatedUser(json.user || null);
+                    } catch (err) {
+                      setAuthError(err instanceof Error ? err.message : "Login failed");
+                    } finally {
+                      setAuthBusy(false);
+                    }
                   }}
                 >
-                  Login
+                  {authBusy ? "Logging in..." : "Login"}
                 </button>
                 <p className="text-xs text-steel-600">Demo login: `mia.manager@stainless.local` / `Password123!`</p>
               </div>
@@ -746,20 +778,31 @@ export default function HomePage() {
                 </select>
                 <button
                   className="btn w-full"
+                  disabled={authBusy}
                   onClick={async () => {
                     setAuthError("");
-                    const res = await fetch("/api/auth/register", {
-                      credentials: "include",
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, role: regRole })
-                    });
-                    const json = await res.json();
-                    if (!res.ok) return setAuthError(json.error || "Registration failed");
-                    await loadCurrentUser();
+                    setAuthBusy(true);
+                    try {
+                      const res = await fetch("/api/auth/register", {
+                        credentials: "include",
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: regName, email: regEmail, password: regPassword, role: regRole })
+                      });
+                      const json = await res.json().catch(() => ({} as AuthResponse));
+                      if (!res.ok) {
+                        setAuthError(json.error || "Registration failed");
+                        return;
+                      }
+                      applyAuthenticatedUser(json.user || null);
+                    } catch (err) {
+                      setAuthError(err instanceof Error ? err.message : "Registration failed");
+                    } finally {
+                      setAuthBusy(false);
+                    }
                   }}
                 >
-                  Create Account
+                  {authBusy ? "Creating..." : "Create Account"}
                 </button>
               </div>
             )}
