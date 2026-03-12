@@ -48,55 +48,109 @@ const highlightPalette = [
 
 const normalizeSnippet = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
-const fallbackHighlights = (bodyText: string): MessageHighlight[] => {
-  const lines = bodyText
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => /\d/.test(line) && /(pipe|tube|conduit|valve|flange|elbow|tee|reducer|cap|coupling|gasket|sheet|plate|coil|bar|fitting)/i.test(line))
-    .slice(0, 6);
+const productKeywords = [
+  "pipe",
+  "tube",
+  "conduit",
+  "valve",
+  "flange",
+  "elbow",
+  "tee",
+  "reducer",
+  "cap",
+  "coupling",
+  "gasket",
+  "sheet",
+  "plate",
+  "coil",
+  "bar",
+  "fitting",
+  "bushing",
+  "locknut",
+  "junction box",
+  "box",
+  "adhesive",
+  "cement",
+  "steel",
+  "stainless",
+  "aluminum",
+  "copper",
+  "pvc",
+  "cpvc",
+  "bolt",
+  "nut",
+  "washer",
+  "clamp",
+  "hose",
+  "pump",
+  "motor",
+  "bearing"
+];
 
-  return lines.map((line, index) => ({
-    id: `fallback-${index}`,
-    label: line.length > 80 ? `${line.slice(0, 77)}...` : line,
-    sourceText: line,
-    colorClass: highlightPalette[index % highlightPalette.length]
-  }));
+const headerPattern = /^(from|to|cc|bcc|subject|date|sent|reply-to|forwarded by|begin forwarded message|dear|hello|hi|thanks|thank you|regards|best|sincerely)[:\s]/i;
+
+const extractQuantity = (line: string) => {
+  const match = line.match(/(\d+(?:\.\d+)?)\s*(pcs|pieces|ea|each|box|boxes|set|sets|spool|spools|ft|feet|m|mm|cm|in|inch|inches|lbs|lb|kg)\b/i);
+  return match ? `${match[1]} ${match[2]}` : undefined;
 };
 
-const buildHighlights = (extracted: Array<{
-  rawSpec?: string;
-  sourceText?: string;
-  quantity?: number;
-  quantityUnit?: string;
-  productType?: string;
-  category?: string;
-}>): MessageHighlight[] => {
-  const items: MessageHighlight[] = [];
-  extracted.forEach((item, index) => {
-      const sourceText = String(item.sourceText || item.rawSpec || "").trim();
-      const label = [item.productType, item.category].filter(Boolean).join(" ").trim() || sourceText;
-      if (!sourceText || !label) return;
-      items.push({
-        id: `parsed-${index}`,
-        label,
-        sourceText,
-        quantity: item.quantity ? `${item.quantity} ${item.quantityUnit || ""}`.trim() : undefined,
-        colorClass: highlightPalette[index % highlightPalette.length]
-      });
-    });
-  return items.slice(0, 8);
+const cleanDetectedLine = (line: string) =>
+  line
+    .replace(/^[>\-\u2022*\s]+/, "")
+    .replace(/^\d+[\.)]\s*/, "")
+    .trim();
+
+const scoreProductLine = (rawLine: string) => {
+  const line = cleanDetectedLine(rawLine);
+  if (!line || line.length < 6 || line.length > 180) return -1;
+  if (headerPattern.test(line)) return -1;
+  if (/^[\w.-]+@[\w.-]+\.\w+$/.test(line)) return -1;
+  if (/^(please|need|quote|rfq|project|material request|ship to)\b/i.test(line) && !/\d/.test(line)) return -1;
+
+  const normalized = normalizeSnippet(line);
+  const hasKeyword = productKeywords.some((keyword) => normalized.includes(keyword));
+  const hasQuantity = /\b\d+(?:\.\d+)?\s*(pcs|pieces|ea|each|box|boxes|set|sets|spool|spools|ft|feet|m|mm|cm|in|inch|inches|lbs|lb|kg|x)\b/i.test(line)
+    || /\b\d+(?:\.\d+)?["']/i.test(line);
+  const hasDimension = /\b\d+(?:\/\d+)?(?:\.\d+)?\s*(?:["']|in|inch|inches|mm|cm)\b/i.test(line);
+  const looksLikeListItem = /^[>\-\u2022*\s]*\d+[\.)]?\s+/i.test(rawLine) || /^[>\-\u2022*]/.test(rawLine);
+
+  let score = 0;
+  if (hasKeyword) score += 2;
+  if (hasQuantity) score += 2;
+  if (hasDimension) score += 1;
+  if (looksLikeListItem) score += 1;
+
+  return hasKeyword && (hasQuantity || hasDimension || looksLikeListItem) ? score : -1;
+};
+
+const detectProductHighlights = (bodyText: string): MessageHighlight[] => {
+  const seen = new Set<string>();
+  const detected = bodyText
+    .split("\n")
+    .map((line) => ({ raw: line, cleaned: cleanDetectedLine(line), score: scoreProductLine(line) }))
+    .filter((line) => line.score >= 3)
+    .filter((line) => {
+      const key = normalizeSnippet(line.cleaned);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+  return detected.map((line, index) => ({
+    id: `detected-${index}`,
+    label: line.cleaned.length > 88 ? `${line.cleaned.slice(0, 85)}...` : line.cleaned,
+    sourceText: line.cleaned,
+    quantity: extractQuantity(line.cleaned),
+    colorClass: highlightPalette[index % highlightPalette.length]
+  }));
 };
 
 const matchHighlight = (line: string, items: MessageHighlight[]) => {
   const normalizedLine = normalizeSnippet(line);
   if (!normalizedLine) return null;
-  return items.find((item) => {
-    const normalizedSource = normalizeSnippet(item.sourceText);
-    const normalizedLabel = normalizeSnippet(item.label);
-    return (normalizedSource.length >= 8 && normalizedLine.includes(normalizedSource))
-      || (normalizedLabel.length >= 6 && normalizedLine.includes(normalizedLabel));
-  }) || null;
+  return items.find((item) => normalizedLine === normalizeSnippet(item.sourceText)) || null;
 };
 
 export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
@@ -110,7 +164,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   const [syncing, setSyncing] = useState(false);
   const [analysisByMessageId, setAnalysisByMessageId] = useState<Record<string, MessageAnalysisState>>({});
   const syncInFlightRef = useRef(false);
-  const analysisCacheRef = useRef<Record<string, MessageHighlight[]>>({});
 
   const selectedBuyer = buyers.find((b) => b.id === selectedBuyerId);
 
@@ -172,71 +225,17 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   }, [selectedBuyerId, loadMessages]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const analyzeMessages = async () => {
-      const inboundMessages = messages.filter((message) => message.direction === "inbound").slice(0, 10);
-      for (const message of inboundMessages) {
-        if (analysisCacheRef.current[message.id]) continue;
-
-        setAnalysisByMessageId((prev) => ({
-          ...prev,
-          [message.id]: {
-            loading: true,
-            items: prev[message.id]?.items || []
-          }
-        }));
-
-        try {
-          const res = await fetch("/api/parse", {
-            credentials: "include",
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: message.bodyText, marginPercent: 12 })
-          });
-          const json = await res.json().catch(() => ({} as { extracted?: Array<{
-            rawSpec?: string;
-            sourceText?: string;
-            quantity?: number;
-            quantityUnit?: string;
-            productType?: string;
-            category?: string;
-          }> }));
-          const nextItems = res.ok
-            ? buildHighlights(json.extracted || [])
-            : fallbackHighlights(message.bodyText);
-          const finalItems = nextItems.length ? nextItems : fallbackHighlights(message.bodyText);
-          analysisCacheRef.current[message.id] = finalItems;
-          if (!cancelled) {
-            setAnalysisByMessageId((prev) => ({
-              ...prev,
-              [message.id]: {
-                loading: false,
-                items: finalItems
-              }
-            }));
-          }
-        } catch {
-          const fallback = fallbackHighlights(message.bodyText);
-          analysisCacheRef.current[message.id] = fallback;
-          if (!cancelled) {
-            setAnalysisByMessageId((prev) => ({
-              ...prev,
-              [message.id]: {
-                loading: false,
-                items: fallback
-              }
-            }));
-          }
-        }
-      }
-    };
-
-    void analyzeMessages();
-
-    return () => {
-      cancelled = true;
-    };
+    const nextAnalysis: Record<string, MessageAnalysisState> = {};
+    messages
+      .filter((message) => message.direction === "inbound")
+      .slice(0, 10)
+      .forEach((message) => {
+        nextAnalysis[message.id] = {
+          loading: false,
+          items: detectProductHighlights(message.bodyText)
+        };
+      });
+    setAnalysisByMessageId(nextAnalysis);
   }, [messages]);
 
   useEffect(() => {
@@ -331,11 +330,37 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                               {analysis?.loading ? (
                                 <div className="text-xs text-steel-500">Identifying potential product requests...</div>
                               ) : analysis?.items?.length ? (
-                                <div className="flex flex-wrap gap-2">
+                                <div className="space-y-2">
                                   {analysis.items.map((item) => (
-                                    <div key={item.id} className={`rounded-full border px-3 py-1 text-xs font-medium text-steel-800 ${item.colorClass}`}>
-                                      {item.label}
-                                      {item.quantity ? ` · ${item.quantity}` : ""}
+                                    <div
+                                      key={item.id}
+                                      className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-3 py-2 text-xs font-medium text-steel-800 ${item.colorClass}`}
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="truncate">{item.label}</div>
+                                        {item.quantity ? <div className="text-[11px] text-steel-600">{item.quantity}</div> : null}
+                                      </div>
+                                      {onStartQuote ? (
+                                        <button
+                                          className="rounded-full border border-white/80 bg-white/95 px-3 py-1 text-[11px] font-semibold text-steel-800 shadow-sm"
+                                          onClick={async () => {
+                                            setQuoteInfo("Opening quote workflow...");
+                                            try {
+                                              await onStartQuote({
+                                                sourceMessageId: m.id,
+                                                buyerName: selectedBuyer.companyName,
+                                                buyerEmail: selectedBuyer.email,
+                                                rfqText: item.sourceText
+                                              });
+                                              setQuoteInfo("Quote workflow opened from detected product request.");
+                                            } catch (err) {
+                                              setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
+                                            }
+                                          }}
+                                        >
+                                          Start Bid
+                                        </button>
+                                      ) : null}
                                     </div>
                                   ))}
                                 </div>

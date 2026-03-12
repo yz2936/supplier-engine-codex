@@ -3,7 +3,7 @@ import { mutateData, readData } from "@/lib/data-store";
 import { upsertBuyerProfile } from "@/lib/buyer-routing";
 import { draftQuoteHtml, draftQuoteText, QuoteDraftMeta } from "@/lib/format";
 import { QuoteLine } from "@/lib/types";
-import { getSmtpConfigForUser } from "@/lib/user-email-config";
+import { getStableSmtpConfigForUser } from "@/lib/user-email-config";
 import { buildQuotePdf } from "@/lib/quote-pdf";
 
 export const sendQuoteEmail = async (params: {
@@ -20,9 +20,9 @@ export const sendQuoteEmail = async (params: {
   if (!lines.length) throw new Error("No quote lines to send");
 
   const data = await readData();
-  const cfg = getSmtpConfigForUser(data, userId);
+  const cfg = getStableSmtpConfigForUser(data, userId);
   if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
-    throw new Error("Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account.");
+    throw new Error("Outbound email is not configured on the server. Set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, and optional SMTP_FROM.");
   }
 
   const transporter = nodemailer.createTransport(cfg);

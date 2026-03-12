@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 import { mutateData, readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
 import { QuantityUnit } from "@/lib/types";
-import { getSmtpConfigForUser } from "@/lib/user-email-config";
+import { getStableSmtpConfigForUser } from "@/lib/user-email-config";
 
 const escapeHtml = (value: string) =>
   value
@@ -59,10 +59,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const overrideMessage = String(body.message ?? "").trim();
 
     const data = await readData();
-    const cfg = getSmtpConfigForUser(data, auth.user.id);
+    const cfg = getStableSmtpConfigForUser(data, auth.user.id);
     if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
       return NextResponse.json({
-        error: "Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account."
+        error: "Outbound email is not configured on the server. Set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, and optional SMTP_FROM."
       }, { status: 400 });
     }
 

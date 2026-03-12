@@ -4,7 +4,7 @@ import { mutateData, readData } from "@/lib/data-store";
 import { createLlmClient, LlmProvider, normalizeProvider } from "@/lib/llm-provider";
 import { requireUser } from "@/lib/server-auth";
 import { Manufacturer } from "@/lib/types";
-import { getSmtpConfigForUser } from "@/lib/user-email-config";
+import { getStableSmtpConfigForUser } from "@/lib/user-email-config";
 
 type ChatAction =
   | { type: "set_margin"; value: number }
@@ -345,9 +345,9 @@ const sendSupplierEmailFromMessage = async (message: string, userId: string, fro
   }
 
   const data = await readData();
-  const cfg = getSmtpConfigForUser(data, userId);
+  const cfg = getStableSmtpConfigForUser(data, userId);
   if (!cfg?.host || !cfg.auth?.user || !cfg.auth.pass) {
-    return "Email account is not configured. Go to Settings -> Email Integration and connect your SMTP/IMAP account.";
+    return "Outbound email is not configured on the server. Set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, and optional SMTP_FROM.";
   }
 
   const transporter = nodemailer.createTransport(cfg);

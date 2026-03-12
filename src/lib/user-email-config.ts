@@ -49,6 +49,22 @@ const smtpFromEnv = () => {
   };
 };
 
+const smtpFromUserSettings = (data: AppData, userId: string) => {
+  const user = data.users.find((u) => u.id === userId);
+  const smtp = user?.emailSettings?.smtp;
+  if (!smtp?.host || !smtp.user || !smtp.passEncrypted) return null;
+  return {
+    host: smtp.host,
+    port: Number(smtp.port || 587),
+    secure: Boolean(smtp.secure),
+    auth: {
+      user: smtp.user.trim(),
+      pass: decryptSecret(smtp.passEncrypted)
+    },
+    from: (smtp.from || smtp.user || user?.email || "").trim()
+  };
+};
+
 const inferImapHostFromSmtp = (smtpHost?: string) => {
   const host = (smtpHost || "").trim().toLowerCase();
   if (!host) return "";
@@ -93,21 +109,11 @@ const popFromEnv = () => {
 };
 
 export const getSmtpConfigForUser = (data: AppData, userId: string) => {
-  const user = data.users.find((u) => u.id === userId);
-  const smtp = user?.emailSettings?.smtp;
-  if (smtp?.host && smtp.user && smtp.passEncrypted) {
-    return {
-      host: smtp.host,
-      port: Number(smtp.port || 587),
-      secure: Boolean(smtp.secure),
-      auth: {
-        user: smtp.user.trim(),
-        pass: decryptSecret(smtp.passEncrypted)
-      },
-      from: (smtp.from || smtp.user || user?.email || "").trim()
-    };
-  }
-  return smtpFromEnv();
+  return smtpFromUserSettings(data, userId) || smtpFromEnv();
+};
+
+export const getStableSmtpConfigForUser = (data: AppData, userId: string) => {
+  return smtpFromEnv() || smtpFromUserSettings(data, userId);
 };
 
 export const getImapConfigForUser = (data: AppData, userId: string) => {
