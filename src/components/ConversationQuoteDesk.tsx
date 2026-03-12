@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { money, stockColor, stockLabel, summarizeRequestedSpecs } from "@/lib/format";
 import { extractTextFromRfqFile, RFQ_FILE_ACCEPT } from "@/lib/rfq-file";
-import { QuoteAgentSession, QuoteApprovalRequest } from "@/lib/types";
+import { QuoteAgentSession, QuoteApprovalRequest, QuantityUnit } from "@/lib/types";
 
 const stageLabels = [
   { key: "email_selected", label: "Email" },
@@ -25,14 +25,42 @@ const statusTone: Record<string, string> = {
 };
 
 const formatTime = (value?: string) => value ? new Date(value).toLocaleString() : "Not yet";
+const truncate = (value: string, max = 88) => value.length > max ? `${value.slice(0, max - 3)}...` : value;
+const stockCardTone = {
+  green: "border-emerald-200 bg-emerald-50/80 text-emerald-900",
+  yellow: "border-amber-200 bg-amber-50/80 text-amber-900",
+  red: "border-rose-200 bg-rose-50/80 text-rose-900"
+} as const;
+const stockActionCopy = {
+  green: "Ready to quote from inventory",
+  yellow: "Partial stock. Source the shortage before sending.",
+  red: "No stock available. Route this line to sourcing."
+} as const;
 
-export function ConversationQuoteDesk() {
+type ConversationQuoteDeskProps = {
+  requestedSession?: QuoteAgentSession | null;
+  onSourceLine?: (seed: {
+    key: string;
+    sourceContext: "quote_shortage";
+    reason: "low_stock" | "out_of_stock" | "new_demand";
+    sku?: string;
+    productType: string;
+    grade: string;
+    dimension?: string;
+    quantity: number;
+    unit: QuantityUnit;
+    requestedLength?: number;
+  }) => void;
+};
+
+export function ConversationQuoteDesk({ requestedSession, onSourceLine }: ConversationQuoteDeskProps) {
   const [sessions, setSessions] = useState<QuoteAgentSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [isNewWorkflow, setIsNewWorkflow] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [manualBuyerName, setManualBuyerName] = useState("");
   const [manualBuyerEmail, setManualBuyerEmail] = useState("");
   const [manualSubject, setManualSubject] = useState("");
@@ -95,21 +123,27 @@ export function ConversationQuoteDesk() {
       const quoteLine = quoteLines[index];
       return {
         id: `${index}-${extractedLine?.rawSpec || quoteLine?.description || match?.inventoryItem?.sku || "line"}`,
+        requestedLine: extractedLine || quoteLine?.requested,
         requestedLabel: extractedLine
-          ? [extractedLine.grade, extractedLine.category].filter(Boolean).join(" ")
-          : quoteLine?.description || "Unparsed item",
+          ? truncate(extractedLine.sourceText || extractedLine.rawSpec || [extractedLine.grade, extractedLine.category].filter(Boolean).join(" "))
+          : truncate(quoteLine?.requested.sourceText || quoteLine?.requested.rawSpec || quoteLine?.description || "Unparsed item"),
         requestedSpecs: extractedLine
           ? summarizeRequestedSpecs(extractedLine).join(" | ") || extractedLine.rawSpec
-          : "Awaiting parse",
+          : quoteLine?.requested
+            ? summarizeRequestedSpecs(quoteLine.requested).join(" | ") || quoteLine.requested.rawSpec
+            : "Awaiting parse",
         quantity: extractedLine
           ? `${extractedLine.quantity} ${extractedLine.quantityUnit}`
           : quoteLine
             ? `${quoteLine.quantity} ${quoteLine.unit}`
             : "-",
+        requestedQuantityValue: extractedLine?.quantity ?? quoteLine?.quantity ?? 0,
+        requestedQuantityUnit: extractedLine?.quantityUnit ?? quoteLine?.unit ?? "unknown",
         score: typeof match?.score === "number" ? `${Math.round(match.score * 100)}%` : "Pending",
         unitPrice: typeof quoteLine?.unitPrice === "number" ? money(quoteLine.unitPrice) : "Pending",
         extendedPrice: typeof quoteLine?.extendedPrice === "number" ? money(quoteLine.extendedPrice) : "Pending",
-        match
+        match,
+        stockStatus: match?.stockStatus || quoteLine?.stockStatus || "red"
       };
     });
   }, [extractionCard, inventoryMatches, quoteCard]);
@@ -148,11 +182,17 @@ export function ConversationQuoteDesk() {
     void loadSessions().catch((err) => setError(err instanceof Error ? err.message : "Failed to load quote sessions"));
   }, []);
 
+  useEffect(() => {
+    if (!requestedSession) return;
+    upsertSession(requestedSession);
+  }, [requestedSession]);
+
   const sendCommand = async (command: string, options?: { forceNew?: boolean; payload?: Record<string, unknown> }) => {
     const text = command.trim();
     if (!text || busy) return;
     setBusy(true);
     setError("");
+    setInfo("");
     try {
       const res = await fetch("/api/agent/quote", {
         credentials: "include",
@@ -186,6 +226,7 @@ export function ConversationQuoteDesk() {
 
     setBusy(true);
     setError("");
+    setInfo("");
     setManualImportInfo("Opening quote workflow from forwarded email...");
     try {
       const quoteRes = await fetch("/api/agent/quote", {
@@ -240,6 +281,7 @@ export function ConversationQuoteDesk() {
     if (!fileList?.length || busy) return;
     setBusy(true);
     setError("");
+    setInfo("");
     setFileImportInfo("Reading intake files...");
     try {
       const files = Array.from(fileList);
@@ -282,6 +324,7 @@ export function ConversationQuoteDesk() {
     if (!activeSession) return;
     setBusy(true);
     setError("");
+    setInfo("");
     try {
       const res = await fetch(`/api/agent/quote/${activeSession.id}`, {
         credentials: "include",
@@ -303,6 +346,7 @@ export function ConversationQuoteDesk() {
     if (!activeSession) return;
     setBusy(true);
     setError("");
+    setInfo("");
     try {
       const res = await fetch(`/api/agent/quote/${activeSession.id}`, {
         credentials: "include",
@@ -329,6 +373,7 @@ export function ConversationQuoteDesk() {
     if (!activeSession) return;
     setBusy(true);
     setError("");
+    setInfo("");
     try {
       const res = await fetch(`/api/agent/quote/${activeSession.id}/approve`, {
         credentials: "include",
@@ -336,7 +381,10 @@ export function ConversationQuoteDesk() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Approval failed");
+      setApprovalModal(null);
       upsertSession(json.session);
+      setInfo(`Quote email sent to ${json.session?.buyerEmail || activeSession.buyerEmail || "buyer"}.`);
+      await loadSessions();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Approval failed");
     } finally {
@@ -348,6 +396,11 @@ export function ConversationQuoteDesk() {
   const approvalPending = activeSession?.approval?.status === "pending";
   const draftReady = activeSession?.stage === "draft_ready" || activeSession?.stage === "awaiting_approval" || activeSession?.stage === "sent";
   const parseReady = Boolean(extractionCard?.type === "rfq_extraction");
+  const sendButtonLabel = approvalPending
+    ? "Approve & Send"
+    : activeSession?.stage === "sent" || activeSession?.status === "completed"
+      ? "Sent"
+      : "Awaiting Approval";
 
   return (
     <>
@@ -385,7 +438,7 @@ export function ConversationQuoteDesk() {
               </button>
               <button className="btn-secondary" disabled={!activeSession || busy} onClick={() => void runSessionAction("save")}>Save Draft</button>
               <button className="btn" disabled={!approvalPending || busy} onClick={() => setApprovalModal(activeSession?.approval || null)}>
-                {approvalPending ? "Approve & Send" : "Awaiting Approval"}
+                {sendButtonLabel}
               </button>
               <button className="btn-ghost" disabled={!activeSession || busy} onClick={() => void discardWorkflow()}>Discard</button>
             </div>
@@ -601,23 +654,56 @@ export function ConversationQuoteDesk() {
                               <div className="mt-1 h-5 w-5 rounded-md border border-blue-200 bg-white" />
                               <div className="min-w-0">
                                 <div className="text-lg font-semibold text-steel-950">{row.requestedLabel}</div>
-                                <div className="mt-1 text-sm text-steel-600">{row.quantity}</div>
+                                <div className="mt-1 text-sm text-steel-600">Requested quantity: {row.quantity}</div>
                                 <div className="mt-1 text-xs leading-5 text-steel-500">{row.requestedSpecs}</div>
                               </div>
                             </div>
-                            <button className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                              Supplier review
-                            </button>
+                            <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${stockCardTone[row.stockStatus]}`}>
+                              {stockLabel(row.stockStatus)}
+                            </div>
                           </div>
 
                           <div className="px-4 py-4">
+                            <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                              <div className={`rounded-2xl border px-4 py-4 ${stockCardTone[row.stockStatus]}`}>
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">Availability</div>
+                                <div className="mt-1 text-lg font-semibold">{stockLabel(row.stockStatus)}</div>
+                                <div className="mt-1 text-sm">
+                                  {row.match?.inventoryItem
+                                    ? `On hand: ${row.match.inventoryItem.qtyOnHand} units`
+                                    : "No matching inventory item identified yet"}
+                                </div>
+                                <div className="mt-1 text-sm">{stockActionCopy[row.stockStatus]}</div>
+                              </div>
+                              {(row.stockStatus === "yellow" || row.stockStatus === "red") && row.requestedLine && onSourceLine ? (
+                                <button
+                                  className="btn h-full min-h-[112px]"
+                                  onClick={() => {
+                                    onSourceLine({
+                                      key: `${activeSession?.id || "quote"}-${row.id}`,
+                                      sourceContext: "quote_shortage",
+                                      reason: row.stockStatus === "red" ? "out_of_stock" : "low_stock",
+                                      sku: row.match?.inventoryItem?.sku,
+                                      productType: row.requestedLine?.category || "Unknown",
+                                      grade: row.requestedLine?.grade || "Unknown",
+                                      dimension: row.requestedLine?.dimensionSummary || row.requestedLine?.rawSpec,
+                                      quantity: row.requestedQuantityValue,
+                                      unit: row.requestedQuantityUnit,
+                                      requestedLength: row.requestedLine?.length
+                                    });
+                                  }}
+                                >
+                                  {row.stockStatus === "red" ? "Source This Item" : "Source Shortage"}
+                                </button>
+                              ) : null}
+                            </div>
                             <div className="mb-3 text-sm font-medium text-steel-600">
                               Inventory & capability {row.match?.alternatives?.length ? `(${row.match.alternatives.length + (row.match.inventoryItem ? 1 : 0)} options)` : ""}
                             </div>
                             <div className="space-y-3">
                               {row.match?.inventoryItem ? (
                                 <div className="rounded-2xl border border-steel-200 bg-white px-4 py-4">
-                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_110px_90px_110px_110px] lg:items-start">
+                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_110px_90px_110px_110px_90px] lg:items-start">
                                     <div>
                                       <div className="font-medium text-steel-900">{row.match.inventoryItem.specText || row.match.inventoryItem.sku}</div>
                                       <div className="mt-1 text-sm text-steel-500">SKU: {row.match.inventoryItem.sku}</div>
@@ -628,6 +714,10 @@ export function ConversationQuoteDesk() {
                                         <span className={`h-2.5 w-2.5 rounded-full ${stockColor(row.match.stockStatus)}`} />
                                         {stockLabel(row.match.stockStatus)}
                                       </div>
+                                    </div>
+                                    <div>
+                                      <div className="text-sm text-steel-500">On Hand</div>
+                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.match.inventoryItem.qtyOnHand}</div>
                                     </div>
                                     <div>
                                       <div className="text-sm text-steel-500">Score</div>
@@ -722,11 +812,16 @@ export function ConversationQuoteDesk() {
                 </div>
               </div>
               {error && <div className="mt-3 text-sm text-rose-600">{error}</div>}
+              {!error && info && <div className="mt-3 text-sm text-teal-700">{info}</div>}
             </div>
 
             <div className="rounded-[24px] border border-steel-200 bg-white/86 p-4">
               <div className="section-title">Review status</div>
               <div className="mt-3 space-y-3">
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Workflow</div>
+                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.status ? activeSession.status.replace(/_/g, " ") : "n/a"}</div>
+                </div>
                 <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Parsed</div>
                   <div className="mt-1 font-semibold text-steel-900">{parseReady ? "Yes" : "No"}</div>
@@ -742,6 +837,10 @@ export function ConversationQuoteDesk() {
                 <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Saved</div>
                   <div className="mt-1 font-semibold text-steel-900">{activeSession?.savedAt ? "Yes" : "No"}</div>
+                </div>
+                <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Last activity</div>
+                  <div className="mt-1 font-semibold text-steel-900">{activeSession?.updatedAt ? formatTime(activeSession.updatedAt) : "n/a"}</div>
                 </div>
                 <div className="rounded-2xl border border-steel-200 bg-steel-50/70 px-3 py-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-steel-500">Exceptions</div>

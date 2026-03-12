@@ -13,7 +13,7 @@ import { SourcingHub } from "@/components/SourcingHub";
 import { canGenerateQuotes, canUploadInventory, roleLabel } from "@/lib/auth";
 import { draftQuoteText, money } from "@/lib/format";
 import { extractTextFromRfqFile, RFQ_FILE_ACCEPT } from "@/lib/rfq-file";
-import { QuantityUnit, QuoteLine, UserRole } from "@/lib/types";
+import { QuantityUnit, QuoteAgentSession, QuoteLine, UserRole } from "@/lib/types";
 import { LlmProvider } from "@/lib/llm-provider";
 
 type AppUser = {
@@ -114,6 +114,7 @@ export default function HomePage() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [requestedQuoteSession, setRequestedQuoteSession] = useState<QuoteAgentSession | null>(null);
   const [agentStage, setAgentStage] = useState<AgentStage>("idle");
   const [agentActivities, setAgentActivities] = useState<AgentActivity[]>([]);
   const parseAbortRef = useRef<AbortController | null>(null);
@@ -634,6 +635,7 @@ export default function HomePage() {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to open quote workflow");
+    setRequestedQuoteSession(json.session as QuoteAgentSession);
   }, []);
 
   useEffect(() => {
@@ -1050,7 +1052,14 @@ export default function HomePage() {
           )}
 
           {activeView === "quote_desk" && (
-            <ConversationQuoteDesk />
+            <ConversationQuoteDesk
+              requestedSession={requestedQuoteSession}
+              onSourceLine={(seed) => {
+                setSourcingSeed(null);
+                setSourcingQuoteSeed(seed);
+                setActiveView("sourcing");
+              }}
+            />
           )}
 
           {activeView === "inventory" && (
