@@ -38,6 +38,9 @@ export function EmailIntegrationSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingInbound, setTestingInbound] = useState(false);
+  const [testingOutbound, setTestingOutbound] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [status, setStatus] = useState("");
@@ -67,6 +70,7 @@ export function EmailIntegrationSettings() {
   const [forwardingAddress, setForwardingAddress] = useState("");
   const [forwardingWebhookPath, setForwardingWebhookPath] = useState("/api/email/inbound");
   const [forwardingSecretRequired, setForwardingSecretRequired] = useState(false);
+  const [testRecipient, setTestRecipient] = useState("");
 
   const buildPayload = () => ({
     smtp: {
@@ -185,6 +189,69 @@ export function EmailIntegrationSettings() {
     }
   };
 
+  const runInboundConnectionTest = async () => {
+    setTestingInbound(true);
+    setTestStatus("Testing inbound mailbox...");
+    try {
+      const res = await fetch("/api/email/account/test", {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...buildPayload(), target: "inbound" })
+      });
+      const json = await res.json().catch(() => ({} as { error?: string; inbound?: string }));
+      if (!res.ok) throw new Error(json.error || "Inbound mailbox test failed");
+      setTestStatus(json.inbound || "Inbound mailbox connected.");
+    } catch (err) {
+      setTestStatus(err instanceof Error ? err.message : "Inbound mailbox test failed");
+    } finally {
+      setTestingInbound(false);
+    }
+  };
+
+  const runOutboundConnectionTest = async () => {
+    setTestingOutbound(true);
+    setTestStatus("Testing SMTP connection...");
+    try {
+      const res = await fetch("/api/email/account/test", {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...buildPayload(), target: "smtp" })
+      });
+      const json = await res.json().catch(() => ({} as { error?: string; smtp?: string }));
+      if (!res.ok) throw new Error(json.error || "SMTP test failed");
+      setTestStatus(json.smtp || "SMTP connection verified.");
+    } catch (err) {
+      setTestStatus(err instanceof Error ? err.message : "SMTP test failed");
+    } finally {
+      setTestingOutbound(false);
+    }
+  };
+
+  const runSendTestEmail = async () => {
+    setSendingTestEmail(true);
+    setTestStatus("Sending test email...");
+    try {
+      const res = await fetch("/api/email/account/send-test", {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          smtp: buildPayload().smtp,
+          recipient: testRecipient
+        })
+      });
+      const json = await res.json().catch(() => ({} as { error?: string; message?: string }));
+      if (!res.ok) throw new Error(json.error || "Failed to send test email");
+      setTestStatus(json.message || "Test email sent.");
+    } catch (err) {
+      setTestStatus(err instanceof Error ? err.message : "Failed to send test email");
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   return (
     <div className="panel panel-aurora space-y-3 text-sm">
       <div className="flex items-center justify-between">
@@ -217,6 +284,7 @@ export function EmailIntegrationSettings() {
             <input className="input" placeholder="SMTP login email" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} />
             <input className="input md:col-span-2" placeholder="SMTP app password (leave blank to keep existing)" type="password" value={smtpPass} onChange={(e) => setSmtpPass(e.target.value)} />
             <input className="input md:col-span-2" placeholder="From address (optional)" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} />
+            <input className="input md:col-span-2" placeholder="Test recipient email" value={testRecipient} onChange={(e) => setTestRecipient(e.target.value)} />
           </div>
 
           <div className="rounded-2xl border border-steel-200/70 bg-white/60 p-3">
@@ -323,21 +391,42 @@ export function EmailIntegrationSettings() {
             </button>
             <button
               className="btn-secondary"
-              disabled={saving || syncing || testing || resetting}
+              disabled={saving || syncing || testing || testingInbound || testingOutbound || sendingTestEmail || resetting}
               onClick={() => void runConnectionTest()}
             >
               {testing ? "Testing..." : "Test Mailbox Connection"}
             </button>
             <button
               className="btn-secondary"
-              disabled={saving || syncing || testing || resetting}
+              disabled={saving || syncing || testing || testingInbound || testingOutbound || sendingTestEmail || resetting}
+              onClick={() => void runInboundConnectionTest()}
+            >
+              {testingInbound ? "Testing Inbound..." : "Test Inbound Login"}
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={saving || syncing || testing || testingInbound || testingOutbound || sendingTestEmail || resetting}
+              onClick={() => void runOutboundConnectionTest()}
+            >
+              {testingOutbound ? "Testing SMTP..." : "Test SMTP Login"}
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={saving || syncing || testing || testingInbound || testingOutbound || sendingTestEmail || resetting}
+              onClick={() => void runSendTestEmail()}
+            >
+              {sendingTestEmail ? "Sending Test..." : "Send Test Email"}
+            </button>
+            <button
+              className="btn-secondary"
+              disabled={saving || syncing || testing || testingInbound || testingOutbound || sendingTestEmail || resetting}
               onClick={() => void runInboundSync()}
             >
               {syncing ? "Syncing..." : "Test Inbound Sync"}
             </button>
             <button
               className="btn-secondary"
-              disabled={saving || syncing || testing || resetting}
+              disabled={saving || syncing || testing || testingInbound || testingOutbound || sendingTestEmail || resetting}
               onClick={async () => {
                 setResetting(true);
                 setStatus("Clearing custom mailbox settings...");
