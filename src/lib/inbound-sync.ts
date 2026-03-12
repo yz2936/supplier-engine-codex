@@ -54,8 +54,23 @@ const extractForwardedMessage = (subject: string, text: string) => {
   return {
     from: forwardedFrom,
     subject: forwardedSubject || subject.replace(/^fwd?:\s*/i, "").trim(),
-    bodyText: forwardedBody
+    bodyText: forwardedBody,
+    detected: true
   };
+};
+
+const headerValue = (
+  parsed: Awaited<ReturnType<typeof simpleParser>>,
+  names: string[]
+) => {
+  const headers = parsed.headers;
+  if (!headers) return "";
+  for (const name of names) {
+    const raw = headers.get(name.toLowerCase());
+    if (typeof raw === "string" && raw.trim()) return raw.trim();
+    if (Array.isArray(raw) && raw[0]) return String(raw[0]).trim();
+  }
+  return "";
 };
 
 const normalizeInboundSource = (params: {
@@ -64,19 +79,22 @@ const normalizeInboundSource = (params: {
   subject: string;
   bodyText: string;
   inboxUser: string;
+  parsed: Awaited<ReturnType<typeof simpleParser>>;
 }) => {
-  const { from, to, subject, bodyText } = params;
+  const { from, to, subject, bodyText, parsed } = params;
   const forwarded = extractForwardedMessage(subject, bodyText);
+  const routedTo = headerValue(parsed, ["delivered-to", "x-original-to", "envelope-to"]) || to;
   const effectiveFrom = forwarded?.from?.trim() || from;
   const effectiveSubject = forwarded?.subject?.trim() || subject;
   const effectiveBodyText = forwarded?.bodyText?.trim() || bodyText;
   return {
+    forwarded: Boolean(forwarded?.detected),
     from: effectiveFrom,
-    to,
+    to: routedTo,
     subject: effectiveSubject,
     bodyText: effectiveBodyText,
     fromEmail: extractEmailAddress(effectiveFrom),
-    toEmail: extractEmailAddress(to || params.inboxUser)
+    toEmail: extractEmailAddress(routedTo || params.inboxUser)
   };
 };
 
@@ -305,7 +323,7 @@ const syncWithClient = async (
   await client.connect();
   await client.mailboxOpen("INBOX");
 
-  const searchResult = await client.search({ seen: false });
+  const searchResult = await client.search({ all: true });
   const uids = Array.isArray(searchResult) ? searchResult : [];
   const newest = uids.slice(Math.max(0, uids.length - Math.max(1, limit)));
 
@@ -328,7 +346,8 @@ const syncWithClient = async (
       to: addressText(parsed.to).trim() || cfg.auth.user,
       subject: (parsed.subject || message.envelope?.subject || "Buyer Reply").trim(),
       bodyText: textFromParsed(parsed),
-      inboxUser: cfg.auth.user
+      inboxUser: cfg.auth.user,
+      parsed
     });
     const sourceMessageId = (parsed.messageId || "").trim() || `uid-${uid}`;
     const receivedAtSource = parsed.date || message.internalDate || new Date();
@@ -340,7 +359,7 @@ const syncWithClient = async (
       skipped += 1;
       continue;
     }
-    if (normalized.fromEmail === inboxAddress || normalized.fromEmail === extractEmailAddress(cfg.auth.user)) {
+    if (!normalized.forwarded && (normalized.fromEmail === inboxAddress || normalized.fromEmail === extractEmailAddress(cfg.auth.user))) {
       skipped += 1;
       continue;
     }
@@ -407,7 +426,8 @@ const syncWithPopClient = async (
       to: addressText(parsed.to).trim() || cfg.auth.user,
       subject: (parsed.subject || "Buyer Reply").trim(),
       bodyText: textFromParsed(parsed),
-      inboxUser: cfg.auth.user
+      inboxUser: cfg.auth.user,
+      parsed
     });
     const receivedAtSource = parsed.date || new Date();
     const receivedAt = receivedAtSource instanceof Date
@@ -418,7 +438,7 @@ const syncWithPopClient = async (
       skipped += 1;
       continue;
     }
-    if (normalized.fromEmail === inboxAddress || normalized.fromEmail === extractEmailAddress(cfg.auth.user)) {
+    if (!normalized.forwarded && (normalized.fromEmail === inboxAddress || normalized.fromEmail === extractEmailAddress(cfg.auth.user))) {
       skipped += 1;
       continue;
     }
