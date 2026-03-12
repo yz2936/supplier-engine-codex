@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       buyerName?: string;
       buyerEmail?: string;
       rfqText?: string;
+      subject?: string;
     }));
     const command = String(body.command ?? "").trim();
     const sessionId = String(body.sessionId ?? "").trim();
@@ -42,7 +43,8 @@ export async function POST(req: Request) {
           sourceMessageId: body.sourceMessageId,
           buyerName: body.buyerName,
           buyerEmail: body.buyerEmail,
-          rfqText: body.rfqText
+          rfqText: body.rfqText,
+          subject: body.subject
         });
         data.quoteAgentSessions = [created, ...(data.quoteAgentSessions || [])].slice(0, 100);
         return created;

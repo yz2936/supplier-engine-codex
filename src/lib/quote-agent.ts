@@ -362,13 +362,16 @@ const buildCards = (params: {
   return cards;
 };
 
-const buildManualSourceMessage = (user: AppUser, seed: { buyerName?: string; buyerEmail?: string; rfqText?: string }): BuyerMessage => ({
+const buildManualSourceMessage = (
+  user: AppUser,
+  seed: { buyerName?: string; buyerEmail?: string; rfqText?: string; subject?: string }
+): BuyerMessage => ({
   id: crypto.randomUUID(),
   buyerId: "manual-import",
   managerUserId: user.id,
   direction: "inbound",
   sourceMessageId: `manual-${crypto.randomUUID()}`,
-  subject: `Forwarded buyer request from ${seed.buyerName?.trim() || seed.buyerEmail?.trim() || "buyer"}`,
+  subject: seed.subject?.trim() || `Forwarded buyer request from ${seed.buyerName?.trim() || seed.buyerEmail?.trim() || "buyer"}`,
   bodyText: seed.rfqText?.trim() || "",
   fromEmail: seed.buyerEmail?.trim() || "unknown-buyer@example.com",
   toEmail: user.email,
@@ -405,9 +408,9 @@ export const createQuoteAgentSession = async (
   data: AppData,
   user: AppUser,
   command: string,
-  seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string }
+  seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string; subject?: string }
 ) => {
-  const manualSeed = seed?.rfqText?.trim() && seed?.buyerEmail?.trim()
+  const manualSeed = seed?.rfqText?.trim()
     ? {
       target: seed.buyerName || seed.buyerEmail || "",
       message: buildManualSourceMessage(user, seed)
@@ -439,11 +442,11 @@ export const createQuoteAgentSession = async (
     session.stage = "error";
     session.messages.push(newMessage("assistant", resolved.target
       ? `I could not find a qualifying industrial-product buyer email from ${resolved.target} in your inbox to quote from.`
-      : "I could not find any qualifying industrial-product buyer email in your inbox to start quoting from."
+      : "I could not find any buyer email in your inbox to start quoting from."
     ));
     session.activities.push(newActivity("agent", "error", resolved.target
       ? `No qualifying industrial-product buyer email from ${resolved.target} was available for quoting.`
-      : "No qualifying industrial-product buyer email was available for quoting."
+      : "No buyer email was available for quoting."
     ));
     return session;
   }

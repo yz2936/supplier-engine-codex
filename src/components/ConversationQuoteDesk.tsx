@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { money, stockColor, stockLabel, summarizeRequestedSpecs } from "@/lib/format";
+import { extractTextFromRfqFile, RFQ_FILE_ACCEPT } from "@/lib/rfq-file";
 import { QuoteAgentSession, QuoteApprovalRequest } from "@/lib/types";
 
 const stageLabels = [
@@ -38,13 +39,15 @@ export function ConversationQuoteDesk() {
   const [manualBody, setManualBody] = useState("");
   const [manualImportInfo, setManualImportInfo] = useState("");
   const [showManualIntake, setShowManualIntake] = useState(false);
+  const [fileImportInfo, setFileImportInfo] = useState("");
   const [approvalModal, setApprovalModal] = useState<QuoteApprovalRequest | null>(null);
   const [pendingMargin, setPendingMargin] = useState(12);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeSession = useMemo(() => {
     if (isNewWorkflow) return null;
-    if (activeSessionId) return sessions.find((session) => session.id === activeSessionId) || null;
-    return sessions[0] || null;
+    if (!activeSessionId) return null;
+    return sessions.find((session) => session.id === activeSessionId) || null;
   }, [activeSessionId, isNewWorkflow, sessions]);
 
   const emailCard = useMemo(
@@ -138,17 +141,14 @@ export function ConversationQuoteDesk() {
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to load quote sessions");
     setSessions(json.sessions || []);
-    if (json.sessions?.[0]?.id) {
-      setActiveSessionId((current: string) => current || json.sessions[0].id);
-      setIsNewWorkflow(false);
-    }
+    setActiveSessionId((current: string) => json.sessions?.some((session: QuoteAgentSession) => session.id === current) ? current : "");
   };
 
   useEffect(() => {
     void loadSessions().catch((err) => setError(err instanceof Error ? err.message : "Failed to load quote sessions"));
   }, []);
 
-  const sendCommand = async (command: string) => {
+  const sendCommand = async (command: string, options?: { forceNew?: boolean; payload?: Record<string, unknown> }) => {
     const text = command.trim();
     if (!text || busy) return;
     setBusy(true);
@@ -158,7 +158,11 @@ export function ConversationQuoteDesk() {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: isNewWorkflow ? "" : activeSession?.id, command: text })
+        body: JSON.stringify({
+          sessionId: options?.forceNew || isNewWorkflow ? "" : activeSession?.id,
+          command: text,
+          ...(options?.payload || {})
+        })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Quote agent failed");
@@ -194,7 +198,8 @@ export function ConversationQuoteDesk() {
             : "Quote this forwarded buyer email.",
           buyerName: manualBuyerName.trim() || undefined,
           buyerEmail,
-          rfqText: bodyText
+          rfqText: bodyText,
+          subject: manualSubject.trim() || undefined
         })
       });
       const quoteJson = await quoteRes.json();
@@ -226,6 +231,48 @@ export function ConversationQuoteDesk() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import forwarded email");
       setManualImportInfo("");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importRfqFiles = async (fileList: FileList | null) => {
+    if (!fileList?.length || busy) return;
+    setBusy(true);
+    setError("");
+    setFileImportInfo("Reading intake files...");
+    try {
+      const files = Array.from(fileList);
+      const extracted = await Promise.all(files.map(async (file) => {
+        const result = await extractTextFromRfqFile(file);
+        return {
+          name: file.name,
+          text: result.text
+        };
+      }));
+      const rfqText = extracted.map((entry) => `[Source File: ${entry.name}]\n${entry.text}`).join("\n\n");
+      const subject = files.length === 1 ? `Uploaded RFQ: ${files[0].name}` : `Uploaded RFQ package (${files.length} files)`;
+      const res = await fetch("/api/agent/quote", {
+        credentials: "include",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: "Quote this uploaded RFQ package.",
+          buyerName: manualBuyerName.trim() || undefined,
+          buyerEmail: manualBuyerEmail.trim().toLowerCase() || undefined,
+          rfqText,
+          subject
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Quote agent failed");
+      upsertSession(json.session);
+      setFileImportInfo(`Opened quote workflow from ${files.length} intake file${files.length === 1 ? "" : "s"}.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setShowManualIntake(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to read intake files");
+      setFileImportInfo("");
     } finally {
       setBusy(false);
     }
@@ -327,11 +374,14 @@ export function ConversationQuoteDesk() {
               >
                 New Workflow
               </button>
-              <button className="btn-secondary" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.")}>
+              <button className="btn-secondary" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.", { forceNew: true })}>
                 {busy ? "Parsing..." : "Parse Email"}
               </button>
               <button className="btn-secondary" disabled={busy} onClick={() => setShowManualIntake((value) => !value)}>
                 {showManualIntake ? "Hide Manual Intake" : "Paste Forwarded Email"}
+              </button>
+              <button className="btn-secondary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
+                Upload RFQ Files
               </button>
               <button className="btn-secondary" disabled={!activeSession || busy} onClick={() => void runSessionAction("save")}>Save Draft</button>
               <button className="btn" disabled={!approvalPending || busy} onClick={() => setApprovalModal(activeSession?.approval || null)}>
@@ -443,6 +493,21 @@ export function ConversationQuoteDesk() {
                 </button>
               </div>
               {manualImportInfo && <div className="mt-3 text-xs text-steel-700">{manualImportInfo}</div>}
+            </div>
+          )}
+
+          <input
+            ref={fileInputRef}
+            className="hidden"
+            type="file"
+            accept={RFQ_FILE_ACCEPT}
+            multiple
+            onChange={(e) => void importRfqFiles(e.target.files)}
+          />
+
+          {fileImportInfo && (
+            <div className="rounded-2xl border border-steel-200 bg-white/80 px-4 py-3 text-xs text-steel-700">
+              {fileImportInfo}
             </div>
           )}
 
