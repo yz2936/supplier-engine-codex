@@ -4,7 +4,6 @@ import net from "node:net";
 import tls from "node:tls";
 import { AppData, AppUser } from "@/lib/types";
 import { extractEmailAddress, findManagerForInbound, upsertBuyerProfile } from "@/lib/buyer-routing";
-import { filterInboundEmail } from "@/lib/inbound-filter";
 import { getImapConfigForUser, getPopConfigForUser } from "@/lib/user-email-config";
 
 type SyncResult = {
@@ -28,6 +27,57 @@ const textFromParsed = (parsed: Awaited<ReturnType<typeof simpleParser>>) => {
   if (text) return text;
   const html = typeof parsed.html === "string" ? parsed.html : "";
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+};
+
+const extractForwardedField = (label: string, text: string) => {
+  const patterns = [
+    new RegExp(`^${label}:\\s*(.+)$`, "im"),
+    new RegExp(`^-+\\s*${label}:\\s*(.+)$`, "im")
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return "";
+};
+
+const extractForwardedMessage = (subject: string, text: string) => {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const forwardedMarker = /-{2,}\s*forwarded message\s*-{2,}|begin forwarded message|from:\s.+\n(?:date|sent):/i;
+  if (!/^fw:|^fwd:/i.test(subject) && !forwardedMarker.test(normalized)) return null;
+
+  const forwardedFrom = extractForwardedField("From", normalized);
+  const forwardedSubject = extractForwardedField("Subject", normalized);
+  const bodyStart = normalized.search(/^(?:hello|hi|dear|\s*$|\d+\s*(?:pcs|ea|ft|m)\b|qty\b|quotation\b|rfq\b)/im);
+  const forwardedBody = bodyStart >= 0 ? normalized.slice(bodyStart).trim() : normalized.trim();
+
+  return {
+    from: forwardedFrom,
+    subject: forwardedSubject || subject.replace(/^fwd?:\s*/i, "").trim(),
+    bodyText: forwardedBody
+  };
+};
+
+const normalizeInboundSource = (params: {
+  from: string;
+  to: string;
+  subject: string;
+  bodyText: string;
+  inboxUser: string;
+}) => {
+  const { from, to, subject, bodyText } = params;
+  const forwarded = extractForwardedMessage(subject, bodyText);
+  const effectiveFrom = forwarded?.from?.trim() || from;
+  const effectiveSubject = forwarded?.subject?.trim() || subject;
+  const effectiveBodyText = forwarded?.bodyText?.trim() || bodyText;
+  return {
+    from: effectiveFrom,
+    to,
+    subject: effectiveSubject,
+    bodyText: effectiveBodyText,
+    fromEmail: extractEmailAddress(effectiveFrom),
+    toEmail: extractEmailAddress(to || params.inboxUser)
+  };
 };
 
 const resolveManager = (
@@ -273,28 +323,24 @@ const syncWithClient = async (
     }
 
     const parsed = await simpleParser(message.source as Buffer);
-    const from = addressText(parsed.from).trim();
-    const to = addressText(parsed.to).trim() || cfg.auth.user;
-    const subject = (parsed.subject || message.envelope?.subject || "Buyer Reply").trim();
-    const bodyText = textFromParsed(parsed);
-    const fromEmail = extractEmailAddress(from);
-    const toEmail = extractEmailAddress(to || cfg.auth.user);
+    const normalized = normalizeInboundSource({
+      from: addressText(parsed.from).trim(),
+      to: addressText(parsed.to).trim() || cfg.auth.user,
+      subject: (parsed.subject || message.envelope?.subject || "Buyer Reply").trim(),
+      bodyText: textFromParsed(parsed),
+      inboxUser: cfg.auth.user
+    });
     const sourceMessageId = (parsed.messageId || "").trim() || `uid-${uid}`;
     const receivedAtSource = parsed.date || message.internalDate || new Date();
     const receivedAt = receivedAtSource instanceof Date
       ? receivedAtSource.toISOString()
       : new Date(receivedAtSource).toISOString();
 
-    if (!fromEmail || !bodyText) {
+    if (!normalized.fromEmail || !normalized.bodyText) {
       skipped += 1;
       continue;
     }
-    const decision = await filterInboundEmail(subject, bodyText);
-    if (!decision.accept) {
-      skipped += 1;
-      continue;
-    }
-    if (fromEmail === inboxAddress || fromEmail === extractEmailAddress(cfg.auth.user)) {
+    if (normalized.fromEmail === inboxAddress || normalized.fromEmail === extractEmailAddress(cfg.auth.user)) {
       skipped += 1;
       continue;
     }
@@ -304,18 +350,18 @@ const syncWithClient = async (
       continue;
     }
 
-    const manager = resolveManager(data, fallbackManager, toEmail || inboxAddress, subject, forceCurrentManager);
-    const buyer = upsertBuyerProfile(data, manager.id, from);
+    const manager = resolveManager(data, fallbackManager, normalized.toEmail || inboxAddress, normalized.subject, forceCurrentManager);
+    const buyer = upsertBuyerProfile(data, manager.id, normalized.from);
     data.buyerMessages.push({
       id: crypto.randomUUID(),
       sourceMessageId,
       buyerId: buyer.id,
       managerUserId: manager.id,
       direction: "inbound",
-      subject,
-      bodyText,
-      fromEmail,
-      toEmail: toEmail || inboxAddress,
+      subject: normalized.subject,
+      bodyText: normalized.bodyText,
+      fromEmail: normalized.fromEmail,
+      toEmail: normalized.toEmail || inboxAddress,
       receivedAt
     });
     buyer.status = "Active";
@@ -356,44 +402,39 @@ const syncWithPopClient = async (
 
     const source = await client.retrieve(item.messageNumber);
     const parsed = await simpleParser(source);
-    const from = addressText(parsed.from).trim();
-    const to = addressText(parsed.to).trim() || cfg.auth.user;
-    const subject = (parsed.subject || "Buyer Reply").trim();
-    const bodyText = textFromParsed(parsed);
-    const fromEmail = extractEmailAddress(from);
-    const toEmail = extractEmailAddress(to || cfg.auth.user);
+    const normalized = normalizeInboundSource({
+      from: addressText(parsed.from).trim(),
+      to: addressText(parsed.to).trim() || cfg.auth.user,
+      subject: (parsed.subject || "Buyer Reply").trim(),
+      bodyText: textFromParsed(parsed),
+      inboxUser: cfg.auth.user
+    });
     const receivedAtSource = parsed.date || new Date();
     const receivedAt = receivedAtSource instanceof Date
       ? receivedAtSource.toISOString()
       : new Date(receivedAtSource).toISOString();
 
-    if (!fromEmail || !bodyText) {
+    if (!normalized.fromEmail || !normalized.bodyText) {
+      skipped += 1;
+      continue;
+    }
+    if (normalized.fromEmail === inboxAddress || normalized.fromEmail === extractEmailAddress(cfg.auth.user)) {
       skipped += 1;
       continue;
     }
 
-    const decision = await filterInboundEmail(subject, bodyText);
-    if (!decision.accept) {
-      skipped += 1;
-      continue;
-    }
-    if (fromEmail === inboxAddress || fromEmail === extractEmailAddress(cfg.auth.user)) {
-      skipped += 1;
-      continue;
-    }
-
-    const manager = resolveManager(data, fallbackManager, toEmail || inboxAddress, subject, forceCurrentManager);
-    const buyer = upsertBuyerProfile(data, manager.id, from);
+    const manager = resolveManager(data, fallbackManager, normalized.toEmail || inboxAddress, normalized.subject, forceCurrentManager);
+    const buyer = upsertBuyerProfile(data, manager.id, normalized.from);
     data.buyerMessages.push({
       id: crypto.randomUUID(),
       sourceMessageId,
       buyerId: buyer.id,
       managerUserId: manager.id,
       direction: "inbound",
-      subject,
-      bodyText,
-      fromEmail,
-      toEmail: toEmail || inboxAddress,
+      subject: normalized.subject,
+      bodyText: normalized.bodyText,
+      fromEmail: normalized.fromEmail,
+      toEmail: normalized.toEmail || inboxAddress,
       receivedAt
     });
     buyer.status = "Active";

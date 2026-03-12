@@ -24,8 +24,8 @@ export async function POST(req: Request) {
       ...result,
       routingMode,
       filter: {
-        enabled: String(process.env.INBOUND_LLM_FILTER ?? "true").toLowerCase() !== "false",
-        model: process.env.INBOUND_FILTER_MODEL?.trim() || "gpt-4o-mini"
+        enabled: false,
+        model: "disabled"
       }
     });
   } catch (err) {

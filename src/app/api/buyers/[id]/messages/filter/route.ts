@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { readData } from "@/lib/data-store";
 import { requireRole } from "@/lib/server-auth";
-import { filterInboundEmail } from "@/lib/inbound-filter";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireRole(req, ["sales_rep", "sales_manager"]);
@@ -16,19 +15,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .filter((m) => m.buyerId === id)
     .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
 
-  const acceptedInboundIds: string[] = [];
-  let inboundTotal = 0;
-  let inboundAccepted = 0;
-
-  for (const m of messages) {
-    if (m.direction !== "inbound") continue;
-    inboundTotal += 1;
-    const decision = await filterInboundEmail(m.subject, m.bodyText);
-    if (decision.accept) {
-      acceptedInboundIds.push(m.id);
-      inboundAccepted += 1;
-    }
-  }
+  const acceptedInboundIds = messages.filter((m) => m.direction === "inbound").map((m) => m.id);
+  const inboundTotal = acceptedInboundIds.length;
+  const inboundAccepted = acceptedInboundIds.length;
 
   return NextResponse.json({
     ok: true,

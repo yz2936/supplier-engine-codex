@@ -33,17 +33,11 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<Buyer["status"]>("New");
   const [info, setInfo] = useState("");
-  const [filterInfo, setFilterInfo] = useState("");
   const [quoteInfo, setQuoteInfo] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [procurementOnly, setProcurementOnly] = useState(true);
-  const [filteringMessages, setFilteringMessages] = useState(false);
-  const [acceptedInboundIds, setAcceptedInboundIds] = useState<string[]>([]);
-  const [manualFilterInfo, setManualFilterInfo] = useState("");
   const syncInFlightRef = useRef(false);
 
   const selectedBuyer = buyers.find((b) => b.id === selectedBuyerId);
-  const acceptedInboundSet = new Set(acceptedInboundIds);
 
   const loadBuyers = useCallback(async () => {
     const res = await fetch("/api/buyers", { credentials: "include", cache: "no-store" });
@@ -83,8 +77,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
         setInfo(json.error || "Sync failed");
       } else {
         if (!silent) setInfo(`Synced: ${json.created} new, ${json.scanned} scanned`);
-        const mode = json.filter?.enabled ? `AI filter ON (${json.filter?.model || "gpt-4o-mini"})` : "AI filter OFF";
-        setFilterInfo(`${mode}. Non-procurement inbound emails are suppressed.`);
         await loadBuyers();
         if (selectedBuyerId) await loadMessages(selectedBuyerId);
       }
@@ -102,9 +94,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
 
   useEffect(() => {
     if (selectedBuyerId) loadMessages(selectedBuyerId);
-    setProcurementOnly(true);
-    setAcceptedInboundIds([]);
-    setManualFilterInfo("");
   }, [selectedBuyerId, loadMessages]);
 
   useEffect(() => {
@@ -115,36 +104,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
     return () => clearInterval(id);
   }, [syncInbound]);
 
-  const applyProcurementFilter = useCallback(async () => {
-    if (!selectedBuyerId) return;
-    setFilteringMessages(true);
-    setManualFilterInfo("Applying procurement filter...");
-    try {
-      const res = await fetch(`/api/buyers/${selectedBuyerId}/messages/filter`, {
-        credentials: "include",
-        method: "POST"
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to filter messages");
-      setAcceptedInboundIds(json.acceptedInboundIds || []);
-      setProcurementOnly(true);
-      const stats = json.stats || {};
-      setManualFilterInfo(`Filter applied: ${stats.inboundAccepted ?? 0}/${stats.inboundTotal ?? 0} inbound messages kept.`);
-    } catch (err) {
-      setManualFilterInfo(err instanceof Error ? err.message : "Failed to filter messages");
-    } finally {
-      setFilteringMessages(false);
-    }
-  }, [selectedBuyerId]);
-
-  useEffect(() => {
-    if (!selectedBuyerId || !procurementOnly) return;
-    void applyProcurementFilter();
-  }, [applyProcurementFilter, messages.length, procurementOnly, selectedBuyerId]);
-
-  const displayedMessages = procurementOnly
-    ? messages.filter((m) => m.direction === "outbound" || acceptedInboundIds.includes(m.id))
-    : messages;
+  const displayedMessages = messages;
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
@@ -152,21 +112,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
         <div className="space-y-2">
           <div className="font-semibold">Buyer Profiles</div>
           <div className="grid grid-cols-1 gap-2">
-            <label className="flex items-center justify-between gap-2 rounded-xl border border-steel-200 bg-white/80 px-3 py-2 text-xs text-steel-700">
-              <span className="shrink-0">Inbox Filter</span>
-              <select
-                className="min-w-0 bg-transparent text-right outline-none"
-                value={procurementOnly ? "buying_intent" : "all"}
-                onChange={(e) => {
-                  const next = e.target.value === "buying_intent";
-                  setProcurementOnly(next);
-                  if (next) void applyProcurementFilter();
-                }}
-              >
-                <option value="buying_intent">Buying Intent</option>
-                <option value="all">All Inbound</option>
-              </select>
-            </label>
             <button
               className="btn-secondary w-full"
               disabled={syncing}
@@ -195,7 +140,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
           {!buyers.length && <div className="text-sm text-steel-700">No routed buyers yet.</div>}
         </div>
         {info && <div className="text-xs text-steel-700">{info}</div>}
-        {filterInfo && <div className="text-xs text-steel-600">{filterInfo}</div>}
       </div>
 
       <div className="min-w-0 space-y-4">
@@ -203,10 +147,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
           <div className="flex flex-col gap-2 border-b border-steel-200/80 pb-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="font-semibold">Buyer Conversation</div>
-              <div className="text-xs text-steel-600">Review qualified requests and open quoting directly from the thread.</div>
-            </div>
-            <div className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
-              ★ Buying intent
+              <div className="text-xs text-steel-600">Review routed emails and open quoting directly from the thread.</div>
             </div>
           </div>
           {selectedBuyer ? (
@@ -216,12 +157,9 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                   <div className="truncate font-medium text-steel-900">{selectedBuyer.companyName}</div>
                   <div className="truncate">{selectedBuyer.email}</div>
                 </div>
-                <button className="btn-secondary w-full sm:w-auto" disabled={filteringMessages} onClick={() => void applyProcurementFilter()}>
-                  {filteringMessages ? "Filtering..." : "Refresh Sourcing Filter"}
-                </button>
-              </div>
-              <div className="rounded-full border border-steel-200 bg-white px-3 py-2 text-xs text-steel-600">
-                  Showing {procurementOnly ? "buying intent only" : "all inbound and outbound messages"}
+                <div className="rounded-full border border-steel-200 bg-white px-3 py-1 text-xs text-steel-600">
+                  All routed messages
+                </div>
               </div>
               <div className="max-h-[560px] space-y-2 overflow-auto rounded-2xl border border-steel-200 bg-steel-50/80 p-2">
                 {displayedMessages.map((m) => (
@@ -229,19 +167,12 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                     key={m.id}
                     className={
                       m.direction === "inbound"
-                        ? acceptedInboundSet.has(m.id)
-                          ? "rounded border border-amber-300 bg-amber-50 p-2"
-                          : "rounded border border-emerald-200 bg-emerald-50 p-2"
+                        ? "rounded border border-emerald-200 bg-emerald-50 p-2"
                         : "rounded border border-slate-200 bg-white p-2"
                     }
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-xs font-medium">{m.direction.toUpperCase()} · {new Date(m.receivedAt).toLocaleString()}</div>
-                      {m.direction === "inbound" && acceptedInboundSet.has(m.id) && (
-                        <div className="rounded-full border border-amber-300 bg-white/90 px-2 py-1 text-[11px] font-medium text-amber-800">
-                          ★ Buying intent
-                        </div>
-                      )}
                     </div>
                     <div className="break-words text-xs text-steel-700">{m.subject}</div>
                     <div className="mt-1 max-w-full whitespace-pre-wrap break-words text-sm text-steel-800">{m.bodyText}</div>
@@ -271,7 +202,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                 {!displayedMessages.length && <div className="text-sm text-steel-700">No messages match the current filter.</div>}
               </div>
               {quoteInfo && <div className="text-xs text-steel-700">{quoteInfo}</div>}
-              {manualFilterInfo && <div className="text-xs text-steel-600">{manualFilterInfo}</div>}
             </>
           ) : (
             <div className="text-sm text-steel-700">Select a buyer profile.</div>

@@ -124,34 +124,9 @@ Return strict JSON with:
 };
 
 export const filterInboundEmail = async (subject: string, bodyText: string): Promise<InboundFilterDecision> => {
-  const s = normalize(subject, bodyText);
-  if (hasNegativeSalesSignal(s)) {
-    return {
-      accept: false,
-      reason: "Rejected as advertisement, inbound sales outreach, or account-related noise.",
-      mode: "heuristic"
-    };
-  }
-
-  if (hasProductSignal(subject, bodyText) && (hasBuySideIntent(s) || hasReplyContext(s))) {
-    return {
-      accept: true,
-      reason: "Accepted due to industrial product/spec details and clear sourcing intent.",
-      mode: "heuristic"
-    };
-  }
-
-  const enabled = String(process.env.INBOUND_LLM_FILTER ?? "true").toLowerCase() !== "false";
-  const provider = defaultProvider();
-
-  if (enabled) {
-    try {
-      const decision = await llmFilter(subject, bodyText, provider);
-      if (decision) return decision;
-    } catch {
-      // fall through to heuristic
-    }
-  }
-
-  return heuristicFilter(subject, bodyText);
+  return {
+    accept: true,
+    reason: "Inbound email accepted. Buyer-intent filtering is disabled.",
+    mode: "heuristic"
+  };
 };
