@@ -1,5 +1,7 @@
 import nodemailer from "nodemailer";
 import { NextResponse } from "next/server";
+import { readData } from "@/lib/data-store";
+import { getSmtpConfigForUser } from "@/lib/user-email-config";
 import { requireUser } from "@/lib/server-auth";
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -21,13 +23,15 @@ export async function POST(req: Request) {
       smtp?: { host?: string; port?: number; secure?: boolean; user?: string; pass?: string; from?: string };
       recipient?: string;
     }));
+    const data = await readData();
+    const savedSmtp = getSmtpConfigForUser(data, auth.user.id);
 
-    const smtpHost = String(body.smtp?.host ?? "").trim();
-    const smtpPort = Number(body.smtp?.port ?? 587);
-    const smtpSecure = Boolean(body.smtp?.secure);
-    const smtpUser = String(body.smtp?.user ?? "").trim().toLowerCase();
-    const smtpPass = String(body.smtp?.pass ?? "").trim();
-    const smtpFrom = String(body.smtp?.from ?? "").trim() || smtpUser;
+    const smtpHost = String(body.smtp?.host ?? savedSmtp?.host ?? "").trim();
+    const smtpPort = Number(body.smtp?.port ?? savedSmtp?.port ?? 587);
+    const smtpSecure = typeof body.smtp?.secure === "boolean" ? body.smtp.secure : Boolean(savedSmtp?.secure);
+    const smtpUser = String(body.smtp?.user ?? savedSmtp?.auth?.user ?? "").trim().toLowerCase();
+    const smtpPass = String(body.smtp?.pass ?? savedSmtp?.auth?.pass ?? "").trim();
+    const smtpFrom = String(body.smtp?.from ?? savedSmtp?.from ?? "").trim() || smtpUser;
     const recipient = String(body.recipient ?? "").trim().toLowerCase();
 
     if (!smtpHost || !smtpUser || !smtpPass || !looksLikeEmail(smtpUser)) {

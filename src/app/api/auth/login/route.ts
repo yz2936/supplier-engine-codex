@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSession, setSessionCookie } from "@/lib/server-auth";
+import { createSession, destroySession, getSessionToken, setSessionCookie } from "@/lib/server-auth";
 import { mutateData } from "@/lib/data-store";
 import { normalizeEmail, verifyPassword } from "@/lib/security";
 
@@ -36,6 +36,10 @@ export async function POST(req: Request) {
     }
 
     const { user } = result;
+    const previousToken = getSessionToken(req);
+    if (previousToken) {
+      await destroySession(previousToken).catch(() => undefined);
+    }
     const { token, expiresAt } = await createSession(user.id);
 
     const res = NextResponse.json({

@@ -128,6 +128,7 @@ export const getAuthenticatedUser = async (req: Request): Promise<AppUser | null
         if (Number.isFinite(expiresAt) && expiresAt > Date.now()) {
           const user = data.users.find((u) => u.id === session.userId);
           if (user) return user;
+          return null;
         } else {
           await mutateData((next) => {
             next.sessions = next.sessions.filter((s) => s.token !== token);
@@ -135,6 +136,7 @@ export const getAuthenticatedUser = async (req: Request): Promise<AppUser | null
           });
         }
       }
+      return null;
     } catch {
       if (fallbackUser) return fallbackUser;
       throw new Error("Auth store unavailable");
