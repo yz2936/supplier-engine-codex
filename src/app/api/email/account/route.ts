@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { mutateData, readData } from "@/lib/data-store";
 import { requireUser } from "@/lib/server-auth";
+import { buildRoutingAddress } from "@/lib/buyer-routing";
 import { clearUserEmailSettings, saveUserEmailSettings, sanitizeUserEmailSettingsForApi } from "@/lib/user-email-config";
 
 const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -28,11 +29,13 @@ export async function GET(req: Request) {
 
     const data = await readData();
     const user = data.users.find((u) => u.id === auth.user.id || u.email === auth.user.email);
+    const proxyAddress = process.env.INBOUND_ROUTE_ADDRESS?.trim() || "";
     return NextResponse.json({
       ok: true,
       settings: sanitizeUserEmailSettingsForApi(user?.emailSettings),
       forwarding: {
-        address: process.env.INBOUND_ROUTE_ADDRESS?.trim() || "",
+        address: proxyAddress,
+        routingAddress: user && proxyAddress ? buildRoutingAddress(proxyAddress, user) : "",
         webhookPath: "/api/email/inbound",
         secretRequired: Boolean(process.env.INBOUND_EMAIL_SECRET?.trim())
       }

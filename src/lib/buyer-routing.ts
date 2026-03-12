@@ -1,5 +1,7 @@
 import { AppData, AppUser, BuyerProfile } from "@/lib/types";
 
+const salesRoutingRoles = new Set(["sales_rep", "sales_manager"]);
+
 export const extractEmailAddress = (raw: string) => {
   const v = raw.trim();
   const angle = v.match(/<([^>]+)>/);
@@ -17,6 +19,19 @@ export const parseManagerIdFromSubject = (subject: string) => {
   return hit?.[1] ?? null;
 };
 
+export const parseRoutingUserIdFromAddress = (toEmailRaw: string) => {
+  const email = extractEmailAddress(toEmailRaw);
+  const hit = email.match(/^[^@+]+\+slroute-([^@]+)@/i);
+  return hit?.[1] ?? null;
+};
+
+export const buildRoutingAddress = (baseAddressRaw: string, user: Pick<AppUser, "id">) => {
+  const baseAddress = extractEmailAddress(baseAddressRaw);
+  const [local, domain] = baseAddress.split("@");
+  if (!local || !domain) return "";
+  return `${local}+slroute-${user.id}@${domain}`;
+};
+
 const normalizeLocalPart = (email: string) => {
   const [local, domain] = email.toLowerCase().split("@");
   if (!domain) return email.toLowerCase();
@@ -27,15 +42,23 @@ const normalizeLocalPart = (email: string) => {
 export const findManagerForInbound = (data: AppData, toEmailRaw: string, subject: string): AppUser | null => {
   const bySubject = parseManagerIdFromSubject(subject);
   if (bySubject) {
-    const found = data.users.find((u) => u.id === bySubject && u.role === "sales_manager");
+    const found = data.users.find((u) => u.id === bySubject && salesRoutingRoles.has(u.role));
+    if (found) return found;
+  }
+
+  const byAddress = parseRoutingUserIdFromAddress(toEmailRaw);
+  if (byAddress) {
+    const found = data.users.find((u) => u.id === byAddress && salesRoutingRoles.has(u.role));
     if (found) return found;
   }
 
   const toEmail = normalizeLocalPart(extractEmailAddress(toEmailRaw));
-  const exact = data.users.find((u) => normalizeLocalPart(u.email) === toEmail && u.role === "sales_manager");
+  const exact = data.users.find((u) => normalizeLocalPart(u.email) === toEmail && salesRoutingRoles.has(u.role));
   if (exact) return exact;
 
-  return data.users.find((u) => u.role === "sales_manager") ?? null;
+  return data.users.find((u) => u.role === "sales_manager")
+    ?? data.users.find((u) => salesRoutingRoles.has(u.role))
+    ?? null;
 };
 
 export const upsertBuyerProfile = (

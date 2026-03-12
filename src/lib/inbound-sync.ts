@@ -39,7 +39,7 @@ const resolveManager = (
 ) => {
   if (forceCurrentManager) return fallback;
   const manager = findManagerForInbound(data, to, subject);
-  if (manager?.role === "sales_manager") return manager;
+  if (manager && (manager.role === "sales_manager" || manager.role === "sales_rep")) return manager;
   return fallback;
 };
 
@@ -461,6 +461,68 @@ export const syncInboundMailboxForManager = async (
     if (isCertChainError(message)) {
       throw new Error(
         `Inbound ${inboundProtocol.toUpperCase()} mailbox TLS validation failed. Allow self-signed certificates only if your mail provider uses a custom certificate chain.`
+      );
+    }
+    throw err;
+  }
+};
+
+export const syncRoutingInboxForUser = async (
+  data: AppData,
+  fallbackUser: AppUser,
+  limit = 25
+): Promise<SyncResult> => {
+  const imapCfg = getImapConfigForUser(data, "__platform__");
+  const popCfg = getPopConfigForUser(data, "__platform__");
+  const inboundProtocol = imapCfg ? "imap" : popCfg ? "pop" : "imap";
+  const cfg = inboundProtocol === "pop" ? popCfg : imapCfg;
+
+  if (!cfg?.auth?.user || !cfg?.auth?.pass) {
+    throw new Error(
+      "Routing inbox is not configured. Set platform IMAP/POP environment variables and INBOUND_ROUTE_ADDRESS."
+    );
+  }
+
+  const runSync = async (rejectUnauthorized: boolean) => {
+    if (inboundProtocol === "pop") {
+      const client = new Pop3Client(cfg as PopConfig, rejectUnauthorized);
+      try {
+        return await syncWithPopClient(client, data, fallbackUser, cfg as PopConfig, limit, false);
+      } finally {
+        await client.quit().catch(() => undefined);
+      }
+    }
+
+    const client = createClient(cfg as {
+      host: string;
+      port: number;
+      secure: boolean;
+      auth: { user: string; pass: string };
+      rejectUnauthorized: boolean;
+    }, rejectUnauthorized);
+    try {
+      return await syncWithClient(client, data, fallbackUser, cfg as {
+        host: string;
+        port: number;
+        secure: boolean;
+        auth: { user: string; pass: string };
+        rejectUnauthorized: boolean;
+      }, limit, false);
+    } finally {
+      await client.logout().catch(() => undefined);
+    }
+  };
+
+  try {
+    return await runSync(cfg.rejectUnauthorized);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (cfg.rejectUnauthorized && isCertChainError(message)) {
+      return runSync(false);
+    }
+    if (isCertChainError(message)) {
+      throw new Error(
+        `Routing inbox ${inboundProtocol.toUpperCase()} TLS validation failed. Allow self-signed certificates only if your proxy mailbox uses a custom certificate chain.`
       );
     }
     throw err;
