@@ -71,6 +71,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   const [syncing, setSyncing] = useState(false);
   const [analysisByMessageId, setAnalysisByMessageId] = useState<Record<string, MessageAnalysisState>>({});
   const syncInFlightRef = useRef(false);
+  const analysisCacheRef = useRef<Record<string, MessageAnalysisState>>({});
 
   const selectedBuyer = buyers.find((b) => b.id === selectedBuyerId);
 
@@ -134,9 +135,14 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   useEffect(() => {
     let cancelled = false;
     const analyzeMessages = async () => {
-      const inboundMessages = messages.filter((message) => message.direction === "inbound").slice(0, 10);
+      const inboundMessages = messages.filter((message) => message.direction === "inbound").slice(0, 4);
       for (const message of inboundMessages) {
         if (cancelled) return;
+        const cached = analysisCacheRef.current[message.id];
+        if (cached) {
+          setAnalysisByMessageId((prev) => ({ ...prev, [message.id]: cached }));
+          continue;
+        }
         setAnalysisByMessageId((prev) => ({
           ...prev,
           [message.id]: {
@@ -177,29 +183,33 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
             }))
             : [];
 
+          const nextState: MessageAnalysisState = {
+            loading: false,
+            items,
+            rfqContainsQuoteableItems: Boolean(json.rfq_contains_quoteable_items),
+            ignoredLines: Array.isArray(json.ignored_lines) ? json.ignored_lines : [],
+            ambiguousLines: Array.isArray(json.ambiguous_lines) ? json.ambiguous_lines : [],
+            combinedRfqText: items.map((item: MessageHighlight) => item.sourceText).filter(Boolean).join("\n")
+          };
+          analysisCacheRef.current[message.id] = nextState;
           setAnalysisByMessageId((prev) => ({
             ...prev,
-            [message.id]: {
-              loading: false,
-              items,
-              rfqContainsQuoteableItems: Boolean(json.rfq_contains_quoteable_items),
-              ignoredLines: Array.isArray(json.ignored_lines) ? json.ignored_lines : [],
-              ambiguousLines: Array.isArray(json.ambiguous_lines) ? json.ambiguous_lines : [],
-              combinedRfqText: items.map((item: MessageHighlight) => item.sourceText).filter(Boolean).join("\n")
-            }
+            [message.id]: nextState
           }));
         } catch {
           if (cancelled) return;
+          const nextState: MessageAnalysisState = {
+            loading: false,
+            items: [],
+            rfqContainsQuoteableItems: false,
+            ignoredLines: [],
+            ambiguousLines: [],
+            combinedRfqText: ""
+          };
+          analysisCacheRef.current[message.id] = nextState;
           setAnalysisByMessageId((prev) => ({
             ...prev,
-            [message.id]: {
-              loading: false,
-              items: [],
-              rfqContainsQuoteableItems: false,
-              ignoredLines: [],
-              ambiguousLines: [],
-              combinedRfqText: ""
-            }
+            [message.id]: nextState
           }));
         }
       }
@@ -214,7 +224,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
     syncInbound(true);
     const id = setInterval(() => {
       syncInbound(true);
-    }, 180000);
+    }, 600000);
     return () => clearInterval(id);
   }, [syncInbound]);
 

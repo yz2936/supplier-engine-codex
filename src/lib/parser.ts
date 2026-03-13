@@ -750,6 +750,12 @@ const heuristicParse = (text: string) => inferBlocks(text)
   .filter((block) => /(pipe|tube|tubing|valve|flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|gasket|strainer|sch|class|qty)/i.test(block))
   .map((block) => parseHeuristicLine(block));
 
+export const parseRFQHeuristic = (text: string): ExtractedLineItem[] => {
+  const cleaned = cleanInput(text);
+  const heuristic = heuristicParse(cleaned);
+  return heuristic.length ? heuristic : [parseHeuristicLine(cleaned)];
+};
+
 const mapLineItem = (line: z.infer<typeof parserResponseSchema>["line_items"][number]): ExtractedLineItem => {
   const source = line.source_text || line.description_normalized || line.product_type || line.product_family || "";
   const quantityFallback = heuristicQuantity(source);
@@ -858,6 +864,5 @@ export const parseRFQ = async (text: string, provider?: LlmProvider): Promise<Ex
     }
   }
 
-  const heuristic = heuristicParse(cleaned);
-  return heuristic.length ? heuristic : [parseHeuristicLine(cleaned)];
+  return parseRFQHeuristic(cleaned);
 };

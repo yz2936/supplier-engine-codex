@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defaultProvider, createLlmClient } from "@/lib/llm-provider";
-import { parseRFQ } from "@/lib/parser";
+import { parseRFQHeuristic } from "@/lib/parser";
 import { ExtractedLineItem } from "@/lib/types";
 
 const itemSchema = z.object({
@@ -206,7 +206,7 @@ const fallbackIdentification = async (rawText: string): Promise<ItemIdentificati
     else if (!quantityPattern.test(line) && !sizePrimaryPattern.test(line) && !reducingPattern.test(line)) ambiguousLines.push(line);
   }
 
-  const extracted = await parseRFQ(rawText, defaultProvider());
+  const extracted = parseRFQHeuristic(rawText);
   const deduped = new Map<string, IdentifiedRfqItem>();
 
   extracted.forEach((item, index) => {
@@ -249,7 +249,8 @@ export const identifyRfqItems = async (params: {
     } satisfies ItemIdentificationResult;
   }
 
-  const llm = createLlmClient(defaultProvider());
+  const useLlm = process.env.ITEM_IDENTIFICATION_USE_LLM?.trim() === "true" && combined.length <= 4000;
+  const llm = useLlm ? createLlmClient(defaultProvider()) : null;
   if (llm) {
     try {
       const response = await llm.client.chat.completions.create({

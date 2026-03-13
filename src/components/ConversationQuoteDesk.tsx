@@ -401,7 +401,6 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
       if (!res.ok) throw new Error(json.error || "Approval failed");
       upsertSession(json.session);
       setInfo(`Quote email sent to ${json.session?.buyerEmail || activeSession.buyerEmail || "buyer"}.`);
-      await loadSessions();
     } catch (err) {
       setApprovalModal(pendingApproval);
       setError(err instanceof Error ? err.message : "Approval failed");
