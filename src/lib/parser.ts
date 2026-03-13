@@ -733,6 +733,19 @@ const inferBlocks = (text: string) => {
   return blocks.length ? blocks : [cleanInput(text)];
 };
 
+const shouldUseFastHeuristicParse = (text: string) => {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const tabularLines = lines.filter((line) => {
+    const pipeCount = (line.match(/\|/g) || []).length;
+    const commaCount = (line.match(/,/g) || []).length;
+    return pipeCount >= 2 || commaCount >= 4;
+  }).length;
+
+  return text.length > 12000
+    || lines.length > 160
+    || (lines.length > 40 && tabularLines / lines.length > 0.3);
+};
+
 const heuristicParse = (text: string) => inferBlocks(text)
   .filter((block) => /(pipe|tube|tubing|valve|flange|elbow|tee|reducer|cap|coupling|union|nipple|olet|gasket|strainer|sch|class|qty)/i.test(block))
   .map((block) => parseHeuristicLine(block));
@@ -834,8 +847,9 @@ const llmParse = async (text: string, provider?: LlmProvider) => {
 
 export const parseRFQ = async (text: string, provider?: LlmProvider): Promise<ExtractedLineItem[]> => {
   const cleaned = cleanInput(text);
+  const fastHeuristicOnly = shouldUseFastHeuristicParse(cleaned);
 
-  if (createLlmClient(provider)) {
+  if (!fastHeuristicOnly && createLlmClient(provider)) {
     try {
       const items = await llmParse(cleaned, provider);
       if (items?.length) return items;

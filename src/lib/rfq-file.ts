@@ -37,6 +37,7 @@ const extractExcelText = async (file: File) => {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, name.endsWith(".csv") ? { type: "array", raw: false } : { type: "array" });
   const sections: string[] = [];
+  let charBudget = 14000;
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
@@ -45,9 +46,16 @@ const extractExcelText = async (file: File) => {
       .map((row) => row.map((cell) => String(cell ?? "").trim()).filter(Boolean).join(" | "))
       .filter(Boolean);
     if (rows.length) {
-      sections.push(`[Sheet: ${sheetName}]`);
-      sections.push(...rows.slice(0, 250));
+      const nextSection: string[] = [`[Sheet: ${sheetName}]`];
+      charBudget -= nextSection[0].length;
+      for (const row of rows.slice(0, 150)) {
+        if (charBudget <= 0) break;
+        nextSection.push(row);
+        charBudget -= row.length;
+      }
+      sections.push(...nextSection);
     }
+    if (charBudget <= 0) break;
   }
 
   return sections.join("\n").trim();

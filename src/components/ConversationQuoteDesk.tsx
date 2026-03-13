@@ -633,53 +633,67 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                       )}
                     </div>
 
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
-                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">In stock</div>
-                        <div className="mt-2 text-2xl font-semibold text-steel-950">{capabilitySummary.green}</div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-900">
+                        In stock {capabilitySummary.green}
                       </div>
-                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Partial / review</div>
-                        <div className="mt-2 text-2xl font-semibold text-steel-950">{capabilitySummary.yellow}</div>
+                      <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900">
+                        Partial {capabilitySummary.yellow}
                       </div>
-                      <div className="rounded-[22px] border border-steel-200 bg-steel-50/70 p-4">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Out of stock</div>
-                        <div className="mt-2 text-2xl font-semibold text-steel-950">{capabilitySummary.red}</div>
+                      <div className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-900">
+                        Out {capabilitySummary.red}
                       </div>
                     </div>
 
                     <div className="mt-4 space-y-4">
                       {workspaceRows.length ? workspaceRows.map((row) => (
-                        <div key={row.id} className="rounded-[22px] border border-steel-200 bg-white">
-                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-steel-200 bg-[#f3f7ff] px-4 py-4">
-                            <div className="flex min-w-0 items-start gap-3">
-                              <div className="mt-1 h-5 w-5 rounded-md border border-blue-200 bg-white" />
-                              <div className="min-w-0">
-                                <div className="text-lg font-semibold text-steel-950">{row.requestedLabel}</div>
-                                <div className="mt-1 text-sm text-steel-600">Requested quantity: {row.quantity}</div>
+                        <div key={row.id} className="rounded-[22px] border border-steel-200 bg-white px-4 py-4">
+                          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_180px] lg:items-center">
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Requested item</div>
+                              <div className="mt-1 text-base font-semibold text-steel-950">{row.requestedLabel}</div>
+                              <div className="mt-1 text-sm text-steel-600">{row.quantity}</div>
+                              {row.requestedSpecs && row.requestedSpecs !== "Awaiting parse" ? (
                                 <div className="mt-1 text-xs leading-5 text-steel-500">{row.requestedSpecs}</div>
-                              </div>
+                              ) : null}
                             </div>
-                            <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${stockCardTone[row.stockStatus]}`}>
-                              {stockLabel(row.stockStatus)}
-                            </div>
-                          </div>
 
-                          <div className="px-4 py-4">
-                            <div className="mb-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-                              <div className={`rounded-2xl border px-4 py-4 ${stockCardTone[row.stockStatus]}`}>
-                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-70">Availability</div>
-                                <div className="mt-1 text-lg font-semibold">{stockLabel(row.stockStatus)}</div>
-                                <div className="mt-1 text-sm">
-                                  {row.match?.inventoryItem
-                                    ? `On hand: ${row.match.inventoryItem.qtyOnHand} units`
-                                    : "No matching inventory item identified yet"}
+                            <div className="rounded-2xl border border-steel-200 bg-steel-50/60 px-4 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Inventory match</div>
+                                <div className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${stockCardTone[row.stockStatus]}`}>
+                                  {stockLabel(row.stockStatus)}
                                 </div>
-                                <div className="mt-1 text-sm">{stockActionCopy[row.stockStatus]}</div>
+                              </div>
+                              {row.match?.inventoryItem ? (
+                                <>
+                                  <div className="mt-2 text-sm font-semibold text-steel-900">
+                                    {row.match.inventoryItem.specText || row.match.inventoryItem.sku}
+                                  </div>
+                                  <div className="mt-1 text-xs text-steel-500">SKU: {row.match.inventoryItem.sku}</div>
+                                  <div className="mt-2 flex flex-wrap gap-3 text-sm text-steel-700">
+                                    <span>On hand {row.match.inventoryItem.qtyOnHand}</span>
+                                    <span>{row.score} match</span>
+                                    <span>{row.unitPrice}</span>
+                                  </div>
+                                  {row.match?.alternatives?.length ? (
+                                    <div className="mt-2 text-xs text-steel-500">
+                                      {row.match.alternatives.length} alternate match{row.match.alternatives.length === 1 ? "" : "es"} available
+                                    </div>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <div className="mt-2 text-sm text-steel-600">No inventory match found for this item.</div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                              <div className={`rounded-2xl border px-3 py-3 text-sm ${stockCardTone[row.stockStatus]}`}>
+                                {stockActionCopy[row.stockStatus]}
                               </div>
                               {(row.stockStatus === "yellow" || row.stockStatus === "red") && row.requestedLine && onSourceLine ? (
                                 <button
-                                  className="btn h-full min-h-[112px]"
+                                  className="btn w-full"
                                   onClick={() => {
                                     onSourceLine({
                                       key: `${activeSession?.id || "quote"}-${row.id}`,
@@ -695,70 +709,13 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                                     });
                                   }}
                                 >
-                                  {row.stockStatus === "red" ? "Source This Item" : "Source Shortage"}
+                                  {row.stockStatus === "red" ? "Source Item" : "Source Shortage"}
                                 </button>
-                              ) : null}
-                            </div>
-                            <div className="mb-3 text-sm font-medium text-steel-600">
-                              Inventory & capability {row.match?.alternatives?.length ? `(${row.match.alternatives.length + (row.match.inventoryItem ? 1 : 0)} options)` : ""}
-                            </div>
-                            <div className="space-y-3">
-                              {row.match?.inventoryItem ? (
-                                <div className="rounded-2xl border border-steel-200 bg-white px-4 py-4">
-                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_110px_90px_110px_110px_90px] lg:items-start">
-                                    <div>
-                                      <div className="font-medium text-steel-900">{row.match.inventoryItem.specText || row.match.inventoryItem.sku}</div>
-                                      <div className="mt-1 text-sm text-steel-500">SKU: {row.match.inventoryItem.sku}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">Avail</div>
-                                      <div className="mt-1 flex items-center gap-2 text-base font-semibold text-steel-900">
-                                        <span className={`h-2.5 w-2.5 rounded-full ${stockColor(row.match.stockStatus)}`} />
-                                        {stockLabel(row.match.stockStatus)}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">On Hand</div>
-                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.match.inventoryItem.qtyOnHand}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">Score</div>
-                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.score}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">Unit Price</div>
-                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.unitPrice}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">Total</div>
-                                      <div className="mt-1 text-base font-semibold text-steel-900">{row.extendedPrice}</div>
-                                    </div>
-                                  </div>
-                                </div>
                               ) : (
-                                <div className="rounded-2xl border border-dashed border-steel-300 bg-steel-50/70 px-4 py-4 text-sm text-steel-600">
-                                  No direct inventory match yet. Review capability or route this line to sourcing.
+                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-center text-sm font-medium text-emerald-900">
+                                  Ready
                                 </div>
                               )}
-
-                              {row.match?.alternatives?.slice(0, 2).map((alternative) => (
-                                <div key={alternative.sku} className="rounded-2xl border border-steel-200 bg-steel-50/50 px-4 py-4">
-                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_110px_110px] lg:items-start">
-                                    <div>
-                                      <div className="font-medium text-steel-900">{alternative.specText || alternative.sku}</div>
-                                      <div className="mt-1 text-sm text-steel-500">SKU: {alternative.sku}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">On Hand</div>
-                                      <div className="mt-1 text-base font-semibold text-steel-900">{alternative.qtyOnHand}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-sm text-steel-500">Base Price</div>
-                                      <div className="mt-1 text-base font-semibold text-steel-900">{money(alternative.basePrice)}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
                             </div>
                           </div>
                         </div>

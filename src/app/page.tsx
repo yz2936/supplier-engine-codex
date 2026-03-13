@@ -620,7 +620,6 @@ export default function HomePage() {
     const rfq = payload.rfqText?.trim();
     if (!rfq) throw new Error("Inbound message is empty");
 
-    setActiveView("quote_desk");
     const res = await fetch("/api/agent/quote", {
       credentials: "include",
       method: "POST",
@@ -635,7 +634,9 @@ export default function HomePage() {
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Failed to open quote workflow");
-    setRequestedQuoteSession(json.session as QuoteAgentSession);
+    const nextSession = json.session as QuoteAgentSession;
+    setRequestedQuoteSession(nextSession);
+    setActiveView("quote_desk");
   }, []);
 
   useEffect(() => {
@@ -1053,6 +1054,7 @@ export default function HomePage() {
 
           {activeView === "quote_desk" && (
             <ConversationQuoteDesk
+              key={requestedQuoteSession?.id || "quote-desk"}
               requestedSession={requestedQuoteSession}
               onSourceLine={(seed) => {
                 setSourcingSeed(null);
