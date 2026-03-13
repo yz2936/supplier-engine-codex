@@ -28,11 +28,17 @@ type MessageHighlight = {
   sourceText: string;
   quantity?: string;
   colorClass: string;
+  confidence?: number;
+  warnings?: string[];
 };
 
 type MessageAnalysisState = {
   loading: boolean;
   items: MessageHighlight[];
+  rfqContainsQuoteableItems?: boolean;
+  ignoredLines?: string[];
+  ambiguousLines?: string[];
+  combinedRfqText?: string;
 };
 
 type BuyerInboxProps = {
@@ -47,105 +53,6 @@ const highlightPalette = [
 ];
 
 const normalizeSnippet = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
-
-const productKeywords = [
-  "pipe",
-  "tube",
-  "conduit",
-  "valve",
-  "flange",
-  "elbow",
-  "tee",
-  "reducer",
-  "cap",
-  "coupling",
-  "gasket",
-  "sheet",
-  "plate",
-  "coil",
-  "bar",
-  "fitting",
-  "bushing",
-  "locknut",
-  "junction box",
-  "box",
-  "adhesive",
-  "cement",
-  "steel",
-  "stainless",
-  "aluminum",
-  "copper",
-  "pvc",
-  "cpvc",
-  "bolt",
-  "nut",
-  "washer",
-  "clamp",
-  "hose",
-  "pump",
-  "motor",
-  "bearing"
-];
-
-const headerPattern = /^(from|to|cc|bcc|subject|date|sent|reply-to|forwarded by|begin forwarded message|dear|hello|hi|thanks|thank you|regards|best|sincerely)[:\s]/i;
-
-const extractQuantity = (line: string) => {
-  const match = line.match(/(\d+(?:\.\d+)?)\s*(pcs|pieces|ea|each|box|boxes|set|sets|spool|spools|ft|feet|m|mm|cm|in|inch|inches|lbs|lb|kg)\b/i);
-  return match ? `${match[1]} ${match[2]}` : undefined;
-};
-
-const cleanDetectedLine = (line: string) =>
-  line
-    .replace(/^[>\-\u2022*\s]+/, "")
-    .replace(/^\d+[\.)]\s*/, "")
-    .trim();
-
-const scoreProductLine = (rawLine: string) => {
-  const line = cleanDetectedLine(rawLine);
-  if (!line || line.length < 6 || line.length > 180) return -1;
-  if (headerPattern.test(line)) return -1;
-  if (/^[\w.-]+@[\w.-]+\.\w+$/.test(line)) return -1;
-  if (/^(please|need|quote|rfq|project|material request|ship to)\b/i.test(line) && !/\d/.test(line)) return -1;
-
-  const normalized = normalizeSnippet(line);
-  const hasKeyword = productKeywords.some((keyword) => normalized.includes(keyword));
-  const hasQuantity = /\b\d+(?:\.\d+)?\s*(pcs|pieces|ea|each|box|boxes|set|sets|spool|spools|ft|feet|m|mm|cm|in|inch|inches|lbs|lb|kg|x)\b/i.test(line)
-    || /\b\d+(?:\.\d+)?["']/i.test(line);
-  const hasDimension = /\b\d+(?:\/\d+)?(?:\.\d+)?\s*(?:["']|in|inch|inches|mm|cm)\b/i.test(line);
-  const looksLikeListItem = /^[>\-\u2022*\s]*\d+[\.)]?\s+/i.test(rawLine) || /^[>\-\u2022*]/.test(rawLine);
-
-  let score = 0;
-  if (hasKeyword) score += 2;
-  if (hasQuantity) score += 2;
-  if (hasDimension) score += 1;
-  if (looksLikeListItem) score += 1;
-
-  return hasKeyword && (hasQuantity || hasDimension || looksLikeListItem) ? score : -1;
-};
-
-const detectProductHighlights = (bodyText: string): MessageHighlight[] => {
-  const seen = new Set<string>();
-  const detected = bodyText
-    .split("\n")
-    .map((line) => ({ raw: line, cleaned: cleanDetectedLine(line), score: scoreProductLine(line) }))
-    .filter((line) => line.score >= 3)
-    .filter((line) => {
-      const key = normalizeSnippet(line.cleaned);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
-
-  return detected.map((line, index) => ({
-    id: `detected-${index}`,
-    label: line.cleaned.length > 88 ? `${line.cleaned.slice(0, 85)}...` : line.cleaned,
-    sourceText: line.cleaned,
-    quantity: extractQuantity(line.cleaned),
-    colorClass: highlightPalette[index % highlightPalette.length]
-  }));
-};
 
 const matchHighlight = (line: string, items: MessageHighlight[]) => {
   const normalizedLine = normalizeSnippet(line);
@@ -225,17 +132,82 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
   }, [selectedBuyerId, loadMessages]);
 
   useEffect(() => {
-    const nextAnalysis: Record<string, MessageAnalysisState> = {};
-    messages
-      .filter((message) => message.direction === "inbound")
-      .slice(0, 10)
-      .forEach((message) => {
-        nextAnalysis[message.id] = {
-          loading: false,
-          items: detectProductHighlights(message.bodyText)
-        };
-      });
-    setAnalysisByMessageId(nextAnalysis);
+    let cancelled = false;
+    const analyzeMessages = async () => {
+      const inboundMessages = messages.filter((message) => message.direction === "inbound").slice(0, 10);
+      for (const message of inboundMessages) {
+        if (cancelled) return;
+        setAnalysisByMessageId((prev) => ({
+          ...prev,
+          [message.id]: {
+            loading: true,
+            items: prev[message.id]?.items || [],
+            rfqContainsQuoteableItems: prev[message.id]?.rfqContainsQuoteableItems,
+            ignoredLines: prev[message.id]?.ignoredLines || [],
+            ambiguousLines: prev[message.id]?.ambiguousLines || [],
+            combinedRfqText: prev[message.id]?.combinedRfqText || ""
+          }
+        }));
+        try {
+          const res = await fetch("/api/item-identification", {
+            credentials: "include",
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ emailText: message.bodyText })
+          });
+          const json = await res.json();
+          if (cancelled) return;
+          const items = Array.isArray(json.items)
+            ? json.items.slice(0, 8).map((item: {
+              line_id?: string;
+              description_normalized?: string;
+              source_text?: string;
+              quantity?: number;
+              quantity_unit?: string;
+              confidence?: number;
+              extraction_warnings?: string[];
+            }, index: number) => ({
+              id: item.line_id || `detected-${index}`,
+              label: item.description_normalized || item.source_text || `RFQ item ${index + 1}`,
+              sourceText: item.source_text || "",
+              quantity: item.quantity ? `${item.quantity} ${item.quantity_unit || ""}`.trim() : undefined,
+              confidence: typeof item.confidence === "number" ? item.confidence : undefined,
+              warnings: Array.isArray(item.extraction_warnings) ? item.extraction_warnings : [],
+              colorClass: highlightPalette[index % highlightPalette.length]
+            }))
+            : [];
+
+          setAnalysisByMessageId((prev) => ({
+            ...prev,
+            [message.id]: {
+              loading: false,
+              items,
+              rfqContainsQuoteableItems: Boolean(json.rfq_contains_quoteable_items),
+              ignoredLines: Array.isArray(json.ignored_lines) ? json.ignored_lines : [],
+              ambiguousLines: Array.isArray(json.ambiguous_lines) ? json.ambiguous_lines : [],
+              combinedRfqText: items.map((item: MessageHighlight) => item.sourceText).filter(Boolean).join("\n")
+            }
+          }));
+        } catch {
+          if (cancelled) return;
+          setAnalysisByMessageId((prev) => ({
+            ...prev,
+            [message.id]: {
+              loading: false,
+              items: [],
+              rfqContainsQuoteableItems: false,
+              ignoredLines: [],
+              ambiguousLines: [],
+              combinedRfqText: ""
+            }
+          }));
+        }
+      }
+    };
+    void analyzeMessages();
+    return () => {
+      cancelled = true;
+    };
   }, [messages]);
 
   useEffect(() => {
@@ -338,31 +310,39 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                                     >
                                       <div className="min-w-0">
                                         <div className="truncate">{item.label}</div>
-                                        {item.quantity ? <div className="text-[11px] text-steel-600">{item.quantity}</div> : null}
+                                        <div className="flex flex-wrap gap-2 text-[11px] text-steel-600">
+                                          {item.quantity ? <span>{item.quantity}</span> : null}
+                                          {typeof item.confidence === "number" ? <span>Confidence {Math.round(item.confidence * 100)}%</span> : null}
+                                        </div>
                                       </div>
-                                      {onStartQuote ? (
-                                        <button
-                                          className="rounded-full border border-white/80 bg-white/95 px-3 py-1 text-[11px] font-semibold text-steel-800 shadow-sm"
-                                          onClick={async () => {
-                                            setQuoteInfo("Opening quote workflow...");
-                                            try {
-                                              await onStartQuote({
-                                                sourceMessageId: m.id,
-                                                buyerName: selectedBuyer.companyName,
-                                                buyerEmail: selectedBuyer.email,
-                                                rfqText: item.sourceText
-                                              });
-                                              setQuoteInfo("Quote workflow opened from detected product request.");
-                                            } catch (err) {
-                                              setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
-                                            }
-                                          }}
-                                        >
-                                          Start Bid
-                                        </button>
-                                      ) : null}
                                     </div>
                                   ))}
+                                  {onStartQuote && (
+                                    <button
+                                      className="btn w-full sm:w-auto"
+                                      onClick={async () => {
+                                        setQuoteInfo("Opening quote workflow...");
+                                        try {
+                                          await onStartQuote({
+                                            sourceMessageId: m.id,
+                                            buyerName: selectedBuyer.companyName,
+                                            buyerEmail: selectedBuyer.email,
+                                            rfqText: analysis.combinedRfqText || m.bodyText
+                                          });
+                                          setQuoteInfo(`Quote workflow opened for ${analysis.items.length} identified RFQ item${analysis.items.length === 1 ? "" : "s"}.`);
+                                        } catch (err) {
+                                          setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
+                                        }
+                                      }}
+                                    >
+                                      Start Bid
+                                    </button>
+                                  )}
+                                  {analysis.ambiguousLines?.length ? (
+                                    <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-800">
+                                      Ambiguous lines excluded from bidding: {analysis.ambiguousLines.slice(0, 3).join(" | ")}
+                                    </div>
+                                  ) : null}
                                 </div>
                               ) : (
                                 <div className="text-xs text-steel-500">No distinct product sections detected yet. You can still quote from the full email.</div>
@@ -390,30 +370,9 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                                 return (
                                   <div
                                     key={`${m.id}-line-${index}`}
-                                    className={`group relative rounded-xl border px-3 py-2 transition ${highlight.colorClass}`}
+                                    className={`rounded-xl border px-3 py-2 transition ${highlight.colorClass}`}
                                   >
-                                    <div className="pr-28 whitespace-pre-wrap text-sm font-medium text-steel-900">{line}</div>
-                                    {onStartQuote && (
-                                      <button
-                                        className="absolute right-2 top-2 rounded-full border border-white/80 bg-white/95 px-3 py-1 text-[11px] font-semibold text-steel-800 opacity-0 shadow-sm transition group-hover:opacity-100"
-                                        onClick={async () => {
-                                          setQuoteInfo("Opening quote workflow...");
-                                          try {
-                                            await onStartQuote({
-                                              sourceMessageId: m.id,
-                                              buyerName: selectedBuyer.companyName,
-                                              buyerEmail: selectedBuyer.email,
-                                              rfqText: highlight.sourceText || line
-                                            });
-                                            setQuoteInfo("Quote workflow opened from highlighted product request.");
-                                          } catch (err) {
-                                            setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
-                                          }
-                                        }}
-                                      >
-                                        Start Quote
-                                      </button>
-                                    )}
+                                    <div className="whitespace-pre-wrap text-sm font-medium text-steel-900">{line}</div>
                                   </div>
                                 );
                               })}
@@ -422,7 +381,7 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                         </>
                       );
                     })()}
-                    {m.direction === "inbound" && onStartQuote && (
+                    {m.direction === "inbound" && onStartQuote && !analysisByMessageId[m.id]?.items?.length && (
                       <button
                         className="btn-secondary mt-2"
                         onClick={async () => {

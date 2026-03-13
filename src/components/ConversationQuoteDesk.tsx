@@ -371,9 +371,11 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
 
   const approveSend = async () => {
     if (!activeSession) return;
+    const pendingApproval = approvalModal;
     setBusy(true);
     setError("");
     setInfo("");
+    setApprovalModal(null);
     try {
       const res = await fetch(`/api/agent/quote/${activeSession.id}/approve`, {
         credentials: "include",
@@ -381,11 +383,11 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Approval failed");
-      setApprovalModal(null);
       upsertSession(json.session);
       setInfo(`Quote email sent to ${json.session?.buyerEmail || activeSession.buyerEmail || "buyer"}.`);
       await loadSessions();
     } catch (err) {
+      setApprovalModal(pendingApproval);
       setError(err instanceof Error ? err.message : "Approval failed");
     } finally {
       setBusy(false);
