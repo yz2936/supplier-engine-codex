@@ -310,7 +310,14 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                             <div className="mt-3 space-y-2">
                               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Detected Product Requests</div>
                               {analysis?.loading ? (
-                                <div className="text-xs text-steel-500">Identifying potential product requests...</div>
+                                <div className="space-y-2">
+                                  <div className="text-xs text-steel-500">Identifying potential product requests...</div>
+                                  {onStartQuote ? (
+                                    <button className="btn w-full sm:w-auto" disabled>
+                                      Start Bid
+                                    </button>
+                                  ) : null}
+                                </div>
                               ) : analysis?.items?.length ? (
                                 <div className="space-y-2">
                                   {analysis.items.map((item) => (
@@ -355,7 +362,30 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                                   ) : null}
                                 </div>
                               ) : (
-                                <div className="text-xs text-steel-500">No distinct product sections detected yet. You can still quote from the full email.</div>
+                                <div className="space-y-2">
+                                  <div className="text-xs text-steel-500">No distinct product sections detected yet. You can still quote from the full email.</div>
+                                  {onStartQuote ? (
+                                    <button
+                                      className="btn w-full sm:w-auto"
+                                      onClick={async () => {
+                                        setQuoteInfo("Opening quote workflow...");
+                                        try {
+                                          await onStartQuote({
+                                            sourceMessageId: m.id,
+                                            buyerName: selectedBuyer.companyName,
+                                            buyerEmail: selectedBuyer.email,
+                                            rfqText: m.bodyText
+                                          });
+                                          setQuoteInfo("Quote workflow opened from inbound request.");
+                                        } catch (err) {
+                                          setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
+                                        }
+                                      }}
+                                    >
+                                      Start Bid
+                                    </button>
+                                  ) : null}
+                                </div>
                               )}
                             </div>
                           )}
@@ -391,27 +421,6 @@ export function BuyerInbox({ onStartQuote }: BuyerInboxProps) {
                         </>
                       );
                     })()}
-                    {m.direction === "inbound" && onStartQuote && !analysisByMessageId[m.id]?.items?.length && (
-                      <button
-                        className="btn-secondary mt-2"
-                        onClick={async () => {
-                          setQuoteInfo("Opening quote workflow...");
-                          try {
-                            await onStartQuote({
-                              sourceMessageId: m.id,
-                              buyerName: selectedBuyer.companyName,
-                              buyerEmail: selectedBuyer.email,
-                              rfqText: m.bodyText
-                            });
-                            setQuoteInfo("Quote workflow opened from inbound request.");
-                          } catch (err) {
-                            setQuoteInfo(err instanceof Error ? err.message : "Failed to open quote workflow");
-                          }
-                        }}
-                      >
-                        Start Quote From This Message
-                      </button>
-                    )}
                   </div>
                 ))}
                 {!displayedMessages.length && <div className="text-sm text-steel-700">No messages match the current filter.</div>}

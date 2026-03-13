@@ -410,6 +410,7 @@ export const createQuoteAgentSession = async (
   command: string,
   seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string; subject?: string }
 ) => {
+  const requestedTarget = extractRequestedCompany(command);
   const manualSeed = seed?.rfqText?.trim()
     ? {
       target: seed.buyerName || seed.buyerEmail || "",
@@ -421,7 +422,9 @@ export const createQuoteAgentSession = async (
       target: seed.buyerName || seed.buyerEmail || "",
       message: data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
     }
-    : await resolveTargetMessage(data, user, command));
+    : requestedTarget
+      ? await resolveTargetMessage(data, user, command)
+      : { target: "", message: null });
   const sourceMessage = resolved.message;
   const session: QuoteAgentSession = {
     id: crypto.randomUUID(),
@@ -442,11 +445,11 @@ export const createQuoteAgentSession = async (
     session.stage = "error";
     session.messages.push(newMessage("assistant", resolved.target
       ? `I could not find a qualifying industrial-product buyer email from ${resolved.target} in your inbox to quote from.`
-      : "I could not find any buyer email in your inbox to start quoting from."
+      : "Please select items to bid from Buyers, paste a forwarded RFQ email, or upload RFQ files before starting a quote."
     ));
     session.activities.push(newActivity("agent", "error", resolved.target
       ? `No qualifying industrial-product buyer email from ${resolved.target} was available for quoting.`
-      : "No buyer email was available for quoting."
+      : "No explicit RFQ selection was provided for quote intake."
     ));
     return session;
   }
@@ -458,7 +461,7 @@ export const createQuoteAgentSession = async (
     )
   );
   session.activities.push(
-    newActivity("agent", "step", `${resolved.target ? `Selected latest buyer email from ${resolved.target}` : "Selected latest buyer email"}: ${sourceMessage.subject || "(no subject)"}`),
+    newActivity("agent", "step", `${resolved.target ? `Selected buyer email from ${resolved.target}` : "Selected explicit RFQ input"}: ${sourceMessage.subject || "(no subject)"}`),
     newActivity("agent", "step", `Parsed ${hydrated.quoteDraft?.lines.length || 0} priced line item${(hydrated.quoteDraft?.lines.length || 0) === 1 ? "" : "s"}`),
     newActivity("agent", "step", "Compared parsed items against inventory and pricing rules"),
     newActivity("agent", "approval_requested", `Approval requested to send quote to ${hydrated.buyerEmail}`)

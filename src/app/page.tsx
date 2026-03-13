@@ -1056,6 +1056,7 @@ export default function HomePage() {
             <ConversationQuoteDesk
               key={requestedQuoteSession?.id || "quote-desk"}
               requestedSession={requestedQuoteSession}
+              onSelectItemsToBid={() => setActiveView("buyers")}
               onSourceLine={(seed) => {
                 setSourcingSeed(null);
                 setSourcingQuoteSeed(seed);

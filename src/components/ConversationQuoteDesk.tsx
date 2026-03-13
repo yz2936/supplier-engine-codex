@@ -39,6 +39,7 @@ const stockStatusTextTone = {
 
 type ConversationQuoteDeskProps = {
   requestedSession?: QuoteAgentSession | null;
+  onSelectItemsToBid?: () => void;
   onSourceLine?: (seed: {
     key: string;
     sourceContext: "quote_shortage";
@@ -53,7 +54,7 @@ type ConversationQuoteDeskProps = {
   }) => void;
 };
 
-export function ConversationQuoteDesk({ requestedSession, onSourceLine }: ConversationQuoteDeskProps) {
+export function ConversationQuoteDesk({ requestedSession, onSelectItemsToBid, onSourceLine }: ConversationQuoteDeskProps) {
   const [sessions, setSessions] = useState<QuoteAgentSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
   const [isNewWorkflow, setIsNewWorkflow] = useState(false);
@@ -428,7 +429,7 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
               <div className="section-title">Quote Desk</div>
               <h3 className="font-['Sora'] text-3xl font-semibold tracking-[-0.04em] text-steel-950">Parse, review, approve</h3>
               <p className="mt-2 max-w-2xl text-sm text-steel-600">
-                Pull the latest buyer email, extract specs, compare with inventory and capability, then approve and send to suppliers.
+                Select an RFQ, review the matched inventory, then approve and send.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -444,8 +445,8 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
               >
                 New Workflow
               </button>
-              <button className="btn-secondary" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.", { forceNew: true })}>
-                {busy ? "Parsing..." : "Parse Email"}
+              <button className="btn-secondary" onClick={onSelectItemsToBid}>
+                Select Items To Bid
               </button>
               <button className="btn-secondary" disabled={busy} onClick={() => setShowManualIntake((value) => !value)}>
                 {showManualIntake ? "Hide Manual Intake" : "Paste Forwarded Email"}
@@ -470,7 +471,7 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                   <div className="mt-1 text-sm text-steel-600">
                     {activeSession
                       ? `${activeSession.buyerEmail || "Buyer not linked"} · last updated ${formatTime(activeSession.updatedAt)}`
-                      : "Load the latest buyer email to start a review."}
+                      : "Select items to bid to start a review."}
                   </div>
                 </div>
                 {activeSession && <span className={`status-chip ${statusTone[activeSession.status] || "status-chip-steel"}`}>{activeSession.status.replace(/_/g, " ")}</span>}
@@ -502,8 +503,8 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
             <div className="rounded-[24px] border border-steel-200 bg-white/72 p-4">
               <div className="section-title">Controls</div>
               <div className="mt-3 space-y-3">
-                <button className="btn w-full" disabled={busy} onClick={() => void sendCommand("Quote the latest email from the buyer.")}>
-                  {busy ? "Working..." : "Parse latest buyer email"}
+                <button className="btn w-full" onClick={onSelectItemsToBid}>
+                  Select items to bid
                 </button>
                 <button className="btn-secondary w-full" disabled={!activeSession || busy} onClick={() => void sendCommand("Don't include the out-of-stock items.")}>
                   Remove out-of-stock lines
@@ -586,7 +587,7 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
               <div className="mx-auto max-w-3xl space-y-3">
                 <div className="rounded-[24px] border border-dashed border-steel-300 bg-white px-5 py-10 text-center">
                   <div className="text-sm font-medium text-steel-900">Start a quote workflow</div>
-                  <div className="mt-2 text-sm text-steel-600">Use “Parse Email” to pull the latest buyer request and populate the review workspace.</div>
+                  <div className="mt-2 text-sm text-steel-600">Select items from Buyers, paste a forwarded RFQ email, or upload RFQ files to populate the workspace.</div>
                 </div>
               </div>
             )}
@@ -627,7 +628,7 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                               {line.meta ? <div className="mt-1 text-xs text-steel-500">{line.meta}</div> : null}
                             </div>
                           )) : (
-                            <div className="text-sm text-steel-600">Parse the latest buyer email to load the request.</div>
+                            <div className="text-sm text-steel-600">Select items to bid or upload an RFQ file to load the request.</div>
                           )}
                         </div>
                       </div>
