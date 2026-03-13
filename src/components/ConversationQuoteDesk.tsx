@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { money, stockColor, stockLabel, summarizeRequestedSpecs } from "@/lib/format";
+import { money, stockLabel, summarizeRequestedSpecs } from "@/lib/format";
 import { extractTextFromRfqFile, RFQ_FILE_ACCEPT } from "@/lib/rfq-file";
 import { QuoteAgentSession, QuoteApprovalRequest, QuantityUnit } from "@/lib/types";
 
@@ -26,15 +26,15 @@ const statusTone: Record<string, string> = {
 
 const formatTime = (value?: string) => value ? new Date(value).toLocaleString() : "Not yet";
 const truncate = (value: string, max = 88) => value.length > max ? `${value.slice(0, max - 3)}...` : value;
-const stockCardTone = {
-  green: "border-emerald-200 bg-emerald-50/80 text-emerald-900",
-  yellow: "border-amber-200 bg-amber-50/80 text-amber-900",
-  red: "border-rose-200 bg-rose-50/80 text-rose-900"
-} as const;
 const stockActionCopy = {
   green: "Ready to quote from inventory",
   yellow: "Partial stock. Source the shortage before sending.",
   red: "No stock available. Route this line to sourcing."
+} as const;
+const stockStatusTextTone = {
+  green: "text-emerald-700",
+  yellow: "text-amber-700",
+  red: "text-rose-700"
 } as const;
 
 type ConversationQuoteDeskProps = {
@@ -154,6 +154,22 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
     const red = inventoryMatches.filter((match) => match.stockStatus === "red").length;
     return { green, yellow, red };
   }, [inventoryMatches]);
+
+  const requestPreviewLines = useMemo(() => {
+    if (extractionCard?.type === "rfq_extraction" && extractionCard.lineItems.length) {
+      return extractionCard.lineItems.slice(0, 8).map((item, index) => ({
+        id: `${index}-${item.rawSpec}`,
+        label: truncate(item.sourceText || item.rawSpec, 120),
+        meta: `${item.quantity} ${item.quantityUnit}`
+      }));
+    }
+    const fallback = (activeSession?.rfqText || "").split("\n").map((line) => line.trim()).filter(Boolean);
+    return fallback.slice(0, 8).map((line, index) => ({
+      id: `${index}-${line}`,
+      label: truncate(line, 120),
+      meta: ""
+    }));
+  }, [activeSession?.rfqText, extractionCard]);
 
   useEffect(() => {
     setPendingMargin(activeSession?.marginPercent ?? 12);
@@ -604,11 +620,16 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                         </div>
                       </div>
                       <div className="rounded-2xl border border-steel-200 bg-white px-3 py-3">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Request body</div>
-                        <div className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-steel-700">
-                          {emailCard?.type === "email_preview"
-                            ? emailCard.email.bodyText
-                            : activeSession.rfqText || "Parse the latest buyer email to load the request."}
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Parsed request</div>
+                        <div className="mt-2 space-y-2">
+                          {requestPreviewLines.length ? requestPreviewLines.map((line) => (
+                            <div key={line.id} className="rounded-xl border border-steel-100 px-3 py-2 text-sm text-steel-700">
+                              <div>{line.label}</div>
+                              {line.meta ? <div className="mt-1 text-xs text-steel-500">{line.meta}</div> : null}
+                            </div>
+                          )) : (
+                            <div className="text-sm text-steel-600">Parse the latest buyer email to load the request.</div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -634,21 +655,21 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-900">
+                      <div className="rounded-full border border-steel-200 bg-white px-3 py-1.5 text-sm font-medium text-steel-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-900">
                         In stock {capabilitySummary.green}
                       </div>
-                      <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900">
+                      <div className="rounded-full border border-steel-200 bg-white px-3 py-1.5 text-sm font-medium text-steel-700 transition hover:border-amber-200 hover:bg-amber-50 hover:text-amber-900">
                         Partial {capabilitySummary.yellow}
                       </div>
-                      <div className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-900">
+                      <div className="rounded-full border border-steel-200 bg-white px-3 py-1.5 text-sm font-medium text-steel-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-900">
                         Out {capabilitySummary.red}
                       </div>
                     </div>
 
                     <div className="mt-4 space-y-4">
                       {workspaceRows.length ? workspaceRows.map((row) => (
-                        <div key={row.id} className="rounded-[22px] border border-steel-200 bg-white px-4 py-4">
-                          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_180px] lg:items-center">
+                        <div key={row.id} className="group rounded-[18px] border border-steel-200 bg-white px-4 py-3 transition hover:border-steel-300 hover:bg-steel-50/40">
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_160px] lg:items-center">
                             <div className="min-w-0">
                               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Requested item</div>
                               <div className="mt-1 text-base font-semibold text-steel-950">{row.requestedLabel}</div>
@@ -658,10 +679,10 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                               ) : null}
                             </div>
 
-                            <div className="rounded-2xl border border-steel-200 bg-steel-50/60 px-4 py-3">
+                            <div className="rounded-2xl border border-steel-200 bg-white px-4 py-3 transition group-hover:border-steel-300">
                               <div className="flex items-center justify-between gap-3">
                                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-steel-500">Inventory match</div>
-                                <div className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${stockCardTone[row.stockStatus]}`}>
+                                <div className={`rounded-full border border-steel-200 px-2.5 py-1 text-[11px] font-semibold text-steel-600 transition group-hover:border-current ${stockStatusTextTone[row.stockStatus]}`}>
                                   {stockLabel(row.stockStatus)}
                                 </div>
                               </div>
@@ -688,12 +709,12 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                             </div>
 
                             <div className="flex flex-col gap-2">
-                              <div className={`rounded-2xl border px-3 py-3 text-sm ${stockCardTone[row.stockStatus]}`}>
+                              <div className="rounded-2xl border border-steel-200 px-3 py-2 text-sm text-steel-600 transition group-hover:border-steel-300">
                                 {stockActionCopy[row.stockStatus]}
                               </div>
                               {(row.stockStatus === "yellow" || row.stockStatus === "red") && row.requestedLine && onSourceLine ? (
                                 <button
-                                  className="btn w-full"
+                                  className="rounded-2xl border border-steel-200 bg-white px-3 py-2 text-sm font-semibold text-steel-800 transition hover:border-steel-300 hover:bg-steel-100"
                                   onClick={() => {
                                     onSourceLine({
                                       key: `${activeSession?.id || "quote"}-${row.id}`,
@@ -712,7 +733,7 @@ export function ConversationQuoteDesk({ requestedSession, onSourceLine }: Conver
                                   {row.stockStatus === "red" ? "Source Item" : "Source Shortage"}
                                 </button>
                               ) : (
-                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-center text-sm font-medium text-emerald-900">
+                                <div className="rounded-2xl border border-steel-200 px-3 py-2 text-center text-sm font-medium text-steel-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-900">
                                   Ready
                                 </div>
                               )}
