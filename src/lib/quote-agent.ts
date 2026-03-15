@@ -201,13 +201,20 @@ const hydrateQuoteSessionFromMessage = async (
   user: AppUser,
   session: QuoteAgentSession,
   sourceMessage: BuyerMessage,
-  seed?: { buyerName?: string; buyerEmail?: string; rfqText?: string }
+  seed?: {
+    buyerName?: string;
+    buyerEmail?: string;
+    rfqText?: string;
+    intakeSourceType?: QuoteAgentSession["intakeSourceType"];
+    intakeSourceLabel?: string;
+  }
 ) => {
   const buyerEmail = seed?.buyerEmail?.trim() || sourceMessage.fromEmail;
   const buyerName = seed?.buyerName?.trim() || data.buyers.find((buyer) => buyer.id === sourceMessage.buyerId)?.companyName || "Buyer";
-  const rfqText = seed?.rfqText?.trim() || sourceMessage.bodyText;
+  const selectedRfqText = seed?.rfqText?.trim() || sourceMessage.bodyText;
+  const sourceText = sourceMessage.bodyText;
   const marginPercent = session.marginPercent ?? 12;
-  const extracted = await parseRFQ(rfqText, "openai");
+  const extracted = await parseRFQ(selectedRfqText, "openai");
   const matches = findBestMatches(extracted, data.inventory);
   const quoteLines = buildQuoteLines(matches, data.surcharges, marginPercent);
   const total = quoteTotal(quoteLines);
@@ -246,7 +253,11 @@ const hydrateQuoteSessionFromMessage = async (
     sourceBuyerId: sourceMessage.buyerId,
     sourceMessageId: sourceMessage.id,
     sourceMessageSubject: sourceMessage.subject,
-    rfqText,
+    intakeSourceType: seed?.intakeSourceType || "buyer_message",
+    intakeSourceLabel: seed?.intakeSourceLabel || sourceMessage.subject || "Buyer RFQ",
+    intakeSourceText: sourceText,
+    intakeSelectionText: selectedRfqText,
+    rfqText: selectedRfqText,
     quoteDraft: {
       lines: quoteLines,
       total,
@@ -261,7 +272,7 @@ const hydrateQuoteSessionFromMessage = async (
       sourceMessage,
       buyerName,
       buyerEmail,
-      extractedText: rfqText,
+      extractedText: selectedRfqText,
       lines: extracted,
       matches,
       quoteLines,
@@ -408,21 +419,30 @@ export const createQuoteAgentSession = async (
   data: AppData,
   user: AppUser,
   command: string,
-  seed?: { sourceMessageId?: string; buyerName?: string; buyerEmail?: string; rfqText?: string; subject?: string }
+  seed?: {
+    sourceMessageId?: string;
+    buyerName?: string;
+    buyerEmail?: string;
+    rfqText?: string;
+    subject?: string;
+    intakeSourceType?: QuoteAgentSession["intakeSourceType"];
+    intakeSourceLabel?: string;
+  }
 ) => {
   const requestedTarget = extractRequestedCompany(command);
-  const manualSeed = seed?.rfqText?.trim()
+  const sourceMessageSeed = seed?.sourceMessageId
+    ? {
+      target: seed.buyerName || seed.buyerEmail || "",
+      message: data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
+    }
+    : null;
+  const manualSeed = !sourceMessageSeed && seed?.rfqText?.trim()
     ? {
       target: seed.buyerName || seed.buyerEmail || "",
       message: buildManualSourceMessage(user, seed)
     }
     : null;
-  const resolved = manualSeed || (seed?.sourceMessageId
-    ? {
-      target: seed.buyerName || seed.buyerEmail || "",
-      message: data.buyerMessages.find((message) => message.id === seed.sourceMessageId && message.managerUserId === user.id) || null
-    }
-    : requestedTarget
+  const resolved = sourceMessageSeed || manualSeed || (requestedTarget
       ? await resolveTargetMessage(data, user, command)
       : { target: "", message: null });
   const sourceMessage = resolved.message;

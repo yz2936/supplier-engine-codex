@@ -208,6 +208,10 @@ export type QuoteAgentSession = {
   sourceBuyerId?: string;
   sourceMessageId?: string;
   sourceMessageSubject?: string;
+  intakeSourceType?: "buyer_message" | "pasted_email" | "uploaded_files" | "manual_command";
+  intakeSourceLabel?: string;
+  intakeSourceText?: string;
+  intakeSelectionText?: string;
   rfqText?: string;
   marginPercent?: number;
   savedQuoteId?: string;

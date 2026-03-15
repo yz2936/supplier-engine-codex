@@ -1,0 +1,67 @@
+# ARCHITECTURE_GUARDRAILS.md
+
+## Current Architecture Risks
+The following areas are already fragile and must not be made worse:
+- large client components with embedded business logic
+- duplicated quote session state across UI and persistence layers
+- heuristic workflow decisions without explicit contracts
+- hidden automation tied to email sync or parsing
+- inconsistent item identification outputs across surfaces
+
+## Frontend Guardrails
+- Do not increase orchestration responsibility in page.tsx.
+- Do not add new business-rule branches inside large client components unless unavoidable.
+- Prefer extracting workflow state into hooks, services, or server-backed actions.
+- Prefer smaller components with explicit props and responsibilities.
+- Do not duplicate quote session truth across multiple client components.
+
+## Domain Guardrails
+- Parser output must distinguish:
+  - raw source
+  - identified items
+  - ambiguous lines
+  - ignored lines
+- Fallback parsing must be visible and traceable.
+- Quote creation rules must be explicit and testable.
+- Inventory match and pricing logic should remain domain-layer logic, not UI logic.
+
+## Data Model Direction
+Move toward normalized entities for:
+- inbound messages
+- parsed item sets
+- quote sessions
+- approvals
+- sourcing requests
+- outbound messages
+
+Avoid creating new ad hoc nested frontend-only workflow structures unless temporary and clearly scoped.
+
+## Event and Observability Direction
+All critical workflow actions should become traceable over time.
+
+Important events include:
+- EMAIL_RECEIVED
+- ITEMS_IDENTIFIED
+- QUOTE_CREATED
+- QUOTE_APPROVED
+- QUOTE_SENT
+- SOURCING_CREATED
+- PARSE_FAILED
+- SEND_FAILED
+
+When adding or changing workflow logic, prefer structures that can later emit durable events.
+
+## UX Guardrails
+- Never auto-open a quote from an unconfirmed source.
+- Never hide the origin of parsed items.
+- Never silently exclude quoteable content without surfacing it.
+- Prefer explicit transitions:
+  Start Bid → Review Items → Match Inventory → Approve → Send
+- Empty, loading, warning, and failure states should be intentional and consistent.
+
+## Preferred Refactor Direction
+1. break large workflow components into smaller units
+2. move business rules out of client components
+3. centralize quote session logic
+4. standardize parser and identification contracts
+5. improve observability around failure points

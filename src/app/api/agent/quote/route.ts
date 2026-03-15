@@ -29,6 +29,8 @@ export async function POST(req: Request) {
       buyerEmail?: string;
       rfqText?: string;
       subject?: string;
+      intakeSourceType?: "buyer_message" | "pasted_email" | "uploaded_files" | "manual_command";
+      intakeSourceLabel?: string;
     }));
     const command = String(body.command ?? "").trim();
     const sessionId = String(body.sessionId ?? "").trim();
@@ -44,7 +46,9 @@ export async function POST(req: Request) {
           buyerName: body.buyerName,
           buyerEmail: body.buyerEmail,
           rfqText: body.rfqText,
-          subject: body.subject
+          subject: body.subject,
+          intakeSourceType: body.intakeSourceType,
+          intakeSourceLabel: body.intakeSourceLabel
         });
         data.quoteAgentSessions = [created, ...(data.quoteAgentSessions || [])].slice(0, 100);
         return created;

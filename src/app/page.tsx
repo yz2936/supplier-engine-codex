@@ -629,7 +629,9 @@ export default function HomePage() {
         sourceMessageId: payload.sourceMessageId,
         buyerName: payload.buyerName,
         buyerEmail: payload.buyerEmail,
-        rfqText: payload.rfqText
+        rfqText: payload.rfqText,
+        intakeSourceType: "buyer_message",
+        intakeSourceLabel: `Buyer inbox message from ${payload.buyerEmail}`
       })
     });
     const json = await res.json();
